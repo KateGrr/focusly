@@ -1,0 +1,21 @@
+# Разовая уборка неудачных первых релизов (v1.0.0, v1.0.1). Файл будет удалён следующим коммитом.
+name: Cleanup broken releases
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cleanup-once.yml']
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Delete releases and tags v1.0.0, v1.0.1
+        run: |
+          R="${{ github.repository }}"
+          for id in $(gh api "repos/$R/releases" --paginate -q '.[] | select(.tag_name=="v1.0.0" or .tag_name=="v1.0.1") | .id'); do
+            echo "delete release $id"; gh api -X DELETE "repos/$R/releases/$id"
+          done
+          for t in v1.0.0 v1.0.1; do gh api -X DELETE "repos/$R/git/refs/tags/$t" || true; done
