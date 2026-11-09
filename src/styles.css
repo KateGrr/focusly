@@ -177,8 +177,10 @@ h3:first-child { margin-top: 6px; }
 .about { display: flex; align-items: center; gap: 12px; }
 .about-logo { width: 40px; height: 40px; }
 
-.small-btn.danger { color: var(--danger); border-color: transparent; background: transparent; }
-.small-btn.danger:hover { background: #fbeceb; border-color: #f0c9c6; }
+.cl-actions { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.del-btn { border: none; background: transparent; color: #d0857f; padding: 2px; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+.del-btn:hover { color: var(--danger); background: #fbeceb; }
+.del-btn svg { display: block; }
 
 /* неделя: названия слева и итог справа закреплены, прокручиваются только дни */
 .report th.name, .report td.name, .report th.sum, .report td.sum { position: sticky; background: var(--bg); z-index: 1; }
@@ -191,3 +193,5 @@ h3:first-child { margin-top: 6px; }
   content: ''; position: absolute; top: 4px; right: 5px; width: 7px; height: 7px; border-radius: 50%;
   background: #2f9e6b; box-shadow: 0 0 0 2px var(--bg);
 }
+.diag { margin-top: 10px; }
+.diag .link { padding: 0; font-size: 12px; }

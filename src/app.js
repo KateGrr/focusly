@@ -747,9 +747,10 @@ function renderClients() {
       el('span', { class: 'dot', style: `background:${c.color}` }),
       el('span', { class: 'cl-title' }, c.name),
       el('span', { class: 'cl-meta' }, `${tr(activeTasks.length === 1 ? 'tasks1' : 'tasksN', { n: activeTasks.length })} · ${fmtDur(sum)}`),
-      el('button', { class: 'small-btn', onclick: (e) => { e.stopPropagation(); c.archived = !c.archived; save(); render(); } },
-        c.archived ? tr('restore') : tr('archive')),
-      el('button', { class: 'small-btn danger', title: tr('delete'), onclick: (e) => { e.stopPropagation(); deleteClient(c.id); } }, tr('delete')),
+      el('span', { class: 'cl-actions' },
+        el('button', { class: 'small-btn', onclick: (e) => { e.stopPropagation(); c.archived = !c.archived; save(); render(); } },
+          c.archived ? tr('restore') : tr('archive')),
+        delButton((e) => { e.stopPropagation(); deleteClient(c.id); })),
     );
     const li = el('li', { class: 'cl-item' }, head);
     if (open) {
@@ -764,8 +765,9 @@ function renderClients() {
         return el('div', { class: 'cl-task' + (t.archived ? ' is-archived' : '') },
           tin,
           el('span', { class: 'cl-meta', title: tr('lastUsedTitle') }, `${fmtDur(total[t.id] || 0)} · ${shortDate(last[t.id])}`),
-          el('button', { class: 'small-btn', onclick: () => { t.archived = !t.archived; save(); render(); } }, t.archived ? tr('restore') : tr('archive')),
-          el('button', { class: 'small-btn danger', title: tr('delete'), onclick: () => deleteTask(t.id) }, tr('delete')),
+          el('span', { class: 'cl-actions' },
+            el('button', { class: 'small-btn', onclick: () => { t.archived = !t.archived; save(); render(); } }, t.archived ? tr('restore') : tr('archive')),
+            delButton(() => deleteTask(t.id))),
         );
       };
       if (!activeTasks.length) body.append(el('div', { class: 'muted small' }, tr('noActiveTasks')));
@@ -865,6 +867,13 @@ function renderWorkDays() {
       save(); renderWorkDays();
     } }, names[i]));
   });
+}
+
+// кнопка удаления: красный минус в кружке, подпись — во всплывающей подсказке
+function delButton(onclick) {
+  const b = el('button', { class: 'del-btn', title: tr('delete'), 'aria-label': tr('delete'), onclick });
+  b.innerHTML = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 10h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  return b;
 }
 
 // удаление — необратимо, поэтому с подтверждением и с суммой времени, которое пропадёт
