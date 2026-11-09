@@ -76,14 +76,9 @@ npm start          # run the app
 npm run dist:win   # build the Windows installer into dist/
 ```
 
-**Releasing a new version:** bump `version` in `package.json`, commit, then push a matching tag:
-
-```bash
-git tag v1.1.0
-git push origin v1.1.0
-```
-
-GitHub Actions builds the installer on Windows and publishes it to Releases; installed apps pick up the update automatically.
+**Releasing a new version:** bump `version` in `package.json` and push to `main`.
+GitHub Actions builds the installer on Windows, creates the `vX.Y.Z` release and uploads it;
+installed apps pick up the update automatically. You can also run it manually: *Actions → Release → Run workflow*.
 
 Project layout:
 

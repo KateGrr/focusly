@@ -1,10 +1,13 @@
 # Сборка Windows-установщика и публикация в GitHub Releases.
-# Запускается, когда в репозиторий пушится тег вида v1.2.3 (версия должна совпадать с package.json).
+# Запускается, когда в main меняется package.json (например, поднята версия),
+# или вручную: Actions → Release → Run workflow.
+# Если релиз с такой версией уже есть — сборка пропускается.
 name: Release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: ['package.json']
   workflow_dispatch:
 
 permissions:
@@ -16,15 +19,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if this version is already released
+        id: ver
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            echo "Release v$VERSION already exists — skipping build."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Building v$VERSION"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-node@v4
+        if: steps.ver.outputs.skip == 'false'
         with:
           node-version: 22
           cache: npm
 
       - name: Install dependencies
+        if: steps.ver.outputs.skip == 'false'
         run: npm ci
 
       - name: Build and publish
+        if: steps.ver.outputs.skip == 'false'
         run: npx electron-builder --win nsis --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
