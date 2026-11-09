@@ -5,8 +5,8 @@
 <h1 align="center">Focusly</h1>
 
 <p align="center">
-  A simple, minimal time tracker for freelancers.<br>
-  Clients & tasks, one-click switching, idle auto-pause, gentle reminders and weekly reports.
+  A simple, minimal time tracker for client work —<br>
+  track time by client and task, switch in one click, get a weekly report.
 </p>
 
 <p align="center">
@@ -98,7 +98,7 @@ src/i18n.js      English and Russian texts
 
 ## Русский
 
-**Focusly** — простой минималистичный тайм-трекер для фрилансеров.
+**Focusly** — простой минималистичный тайм-трекер для работы с клиентами: время по клиентам и задачам, переключение в один клик, отчёт за неделю.
 
 **Что умеет:** клиенты и задачи с запуском в один клик и мгновенным переключением; каждый день начинается с нуля,
 прошлые дни можно открыть и поправить; ручная правка интервалов; автопауза при бездействии, блокировке экрана и сне

@@ -2,7 +2,7 @@
   "name": "focusly",
   "productName": "Focusly",
   "version": "1.0.4",
-  "description": "Focusly — simple time tracker for freelancers",
+  "description": "Focusly — a simple, minimal time tracker for client work",
   "main": "src/main.js",
   "author": "Focusly",
   "license": "MIT",
@@ -58,8 +58,8 @@
   "keywords": [
     "time tracker",
     "time tracking",
-    "freelancer",
-    "electron",
-    "productivity"
+    "client work",
+    "productivity",
+    "electron"
   ]
 }
