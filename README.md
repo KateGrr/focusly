@@ -72,7 +72,7 @@ Updates install automatically: when a new version is ready, Focusly offers to re
    (automatic installation on macOS requires a paid Apple certificate).
 
 ### Linux
-1. Download **`Focusly-x.y.z-linux-x64.AppImage`**.
+1. Download **`Focusly-x.y.z-linux-x86_64.AppImage`**.
 2. Make it executable and run: `chmod +x Focusly-*.AppImage && ./Focusly-*.AppImage`
    (on some distros you need `libfuse2`: `sudo apt install libfuse2`).
 
