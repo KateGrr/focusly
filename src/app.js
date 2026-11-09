@@ -297,7 +297,10 @@ function showIdlePopup() {
   });
 }
 
-function onIdleSeconds(sec) {
+let idleTicks = 0, lastIdleSec = null, lastIdleAt = 0;
+function onIdleSeconds(sec) { safe('idle', () => onIdleSecondsImpl(sec)); }
+function onIdleSecondsImpl(sec) {
+  idleTicks++; lastIdleSec = sec; lastIdleAt = Date.now();
   const s = data.settings;
   const now = Date.now();
   if (!away && s.idleOn && sec >= s.idleMinutes * 60) beginAway(now - sec * 1000);
@@ -351,10 +354,18 @@ function focusAddTask() {
   setView('day');
   setTimeout(() => $('taskInput').focus(), 80);
 }
+// каждая проверка отдельно: ошибка в одной не должна отключать остальные
+let lastErrors = [];
+function safe(name, fn) {
+  try { fn(); } catch (e) {
+    lastErrors = [`${new Date().toLocaleTimeString()} ${name}: ${e && e.message}`, ...lastErrors].slice(0, 5);
+    console.error(name, e);
+  }
+}
 function runChecks() {
-  checkEndOfDay();
-  checkLongRunning();
-  checkNotRunning();
+  safe('endOfDay', checkEndOfDay);
+  safe('longRunning', checkLongRunning);
+  safe('notRunning', checkNotRunning);
 }
 
 // ---------- трей ----------
@@ -805,6 +816,40 @@ function renderUpdate() {
   document.querySelector('.tabs [data-view=settings]').classList.toggle('has-update', st === 'downloaded' || st === 'manual');
 }
 
+// почему «таймер не запущен» сейчас не показывается — для диагностики
+function reminderBlockers() {
+  const s = data.settings, b = [], now = Date.now();
+  if (!s.notRunningOn) b.push('notRunningOff');
+  if (!isWorkDay()) b.push('dayOff');
+  if (running()) b.push('timerRunning');
+  if (away) b.push('away(' + Math.round((now - away.start) / 1000) + 's)');
+  if (popupKind) b.push('popupOpen:' + popupKind);
+  if (!activeSince) b.push('notActive');
+  if (now < notRunningSnoozeUntil) b.push('snoozed(' + Math.round((notRunningSnoozeUntil - now) / 1000) + 's)');
+  if (activeSince && now - activeSince < s.notRunningMinutes * 60000) b.push('waiting(' + Math.round((s.notRunningMinutes * 60000 - (now - activeSince)) / 1000) + 's)');
+  return b;
+}
+async function diagnostics() {
+  const s = data.settings, r = running(), now = Date.now();
+  const pick = (keys) => Object.fromEntries(keys.map((k) => [k, s[k]]));
+  return JSON.stringify({
+    main: await window.api.diagMain(),
+    time: new Date().toString(),
+    settings: pick(['remindersOn', 'reminderMinutes', 'notRunningOn', 'notRunningMinutes', 'eodOn', 'eodTime', 'workDays', 'idleOn', 'idleMinutes', 'lockPause', 'sound', 'systemNotify', 'lang']),
+    state: {
+      popupKind, away: away ? Math.round((now - away.start) / 1000) : null,
+      activeSinceSec: activeSince ? Math.round((now - activeSince) / 1000) : null,
+      snoozeSec: Math.max(0, Math.round((notRunningSnoozeUntil - now) / 1000)),
+      running: r ? { sec: Math.round((now - r.start) / 1000), idleStart: !!r.idleStart, lastCheckSec: r.lastCheck ? Math.round((now - r.lastCheck) / 1000) : null } : null,
+      workDay: isWorkDay(), weekday: new Date().getDay(), eodShownDay: data.eodShownDay, eodSnoozeSec: eodSnoozeUntil ? Math.round((eodSnoozeUntil - now) / 1000) : 0,
+    },
+    idle: { ticks: idleTicks, lastSec: lastIdleSec, lastAgoSec: lastIdleAt ? Math.round((now - lastIdleAt) / 1000) : null },
+    blockers: reminderBlockers(),
+    errors: lastErrors,
+    counts: { clients: data.clients.length, tasks: data.tasks.length, entries: data.entries.length },
+  }, null, 1);
+}
+
 function renderWorkDays() {
   const box = $('workDays');
   box.innerHTML = '';
@@ -923,19 +968,29 @@ function bind() {
   });
 
   // настройки: чекбоксы, числа и время с атрибутом data-s
-  document.querySelectorAll('[data-s]').forEach((inp) => inp.addEventListener('change', () => {
+  // настройки сохраняются сразу при вводе (не нужно кликать мимо поля); неверное значение откатывается при уходе из поля
+  const onSetting = (inp, evt) => {
     const key = inp.dataset.s;
     if (inp.type === 'checkbox') data.settings[key] = inp.checked;
     else if (inp.type === 'number') {
       const v = Math.round(Number(inp.value));
-      if (v >= Number(inp.min) && v <= Number(inp.max)) data.settings[key] = v; else inp.value = data.settings[key];
+      if (inp.value !== '' && v >= Number(inp.min) && v <= Number(inp.max)) data.settings[key] = v;
+      else if (evt.type === 'change') inp.value = data.settings[key];
+      else return;
     } else if (inp.type === 'time') {
-      if (/^\d{1,2}:\d{2}$/.test(inp.value)) { data.settings[key] = inp.value; data.eodShownDay = null; } else inp.value = data.settings[key];
+      if (/^\d{1,2}:\d{2}$/.test(inp.value)) { data.settings[key] = inp.value; data.eodShownDay = null; }
+      else if (evt.type === 'change') inp.value = data.settings[key];
+      else return;
     }
     if (!data.settings.remindersOn && popupKind === 'reminder') closePopup();
     if (!data.settings.notRunningOn && popupKind === 'notRunning') closePopup();
+    if (key === 'notRunningMinutes' || key === 'notRunningOn') notRunningSnoozeUntil = 0; // новые настройки — сразу в силе
     save();
-  }));
+  };
+  document.querySelectorAll('[data-s]').forEach((inp) => {
+    inp.addEventListener('change', (e) => onSetting(inp, e));
+    if (inp.type !== 'checkbox') inp.addEventListener('input', (e) => onSetting(inp, e));
+  });
   $('autostart').addEventListener('change', () => window.api.setAutostart($('autostart').checked));
   $('testPopup').addEventListener('click', () => {
     closePopup(); // если какое-то окно «зависло» — закрываем и показываем тестовое
@@ -953,6 +1008,7 @@ function bind() {
   $('updCheck').addEventListener('click', async () => { updStatus = await window.api.checkUpdate(); renderUpdate(); });
   $('updInstall').addEventListener('click', () => window.api.installUpdate());
   $('updDownload').addEventListener('click', () => window.api.openReleases());
+  $('diagCopy').addEventListener('click', async () => { await window.api.copy(await diagnostics()); $('diagMsg').textContent = tr('diagCopied'); });
   window.api.onUpdateStatus((st) => { updStatus = st; renderUpdate(); });
   $('openFolder').addEventListener('click', () => window.api.openDataFolder());
 
@@ -1014,8 +1070,8 @@ async function init() {
       if (weekStart === mondayOf(addDays(t, -1)) && mondayOf(t) !== weekStart) weekStart = mondayOf(t);
       render();
     }
-    tickNumbers();
-    pushTray();
+    safe('tick', tickNumbers);
+    safe('tray', pushTray);
     if (++beat % 60 === 0) { data.lastSeen = Date.now(); save(); }
     if (beat % 5 === 0) runChecks();
   }, 1000);

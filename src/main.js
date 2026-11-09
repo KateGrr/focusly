@@ -62,25 +62,26 @@ function showMain() {
 
 // ---------- мини-режим: одна строка поверх всех окон ----------
 const MINI_H = 40;
-function miniBounds() {
+// мини-полоска открывается на том мониторе, где было главное окно (или где курсор);
+// место запоминается отдельно для каждого монитора
+function insideWorkArea(p, w, a) {
+  return p.x >= a.x - w + 40 && p.x <= a.x + a.width - 40 && p.y >= a.y && p.y <= a.y + a.height - 20;
+}
+function miniBounds(refBounds) {
   const w = Math.max(240, Math.min(700, ui.miniW || 340));
-  if (ui.miniX != null && ui.miniY != null) {
-    const d = screen.getDisplayMatching({ x: ui.miniX, y: ui.miniY, width: w, height: MINI_H });
-    const a = d.workArea;
-    // если монитор отключили — вернём полоску на видимый экран
-    if (ui.miniX >= a.x - w + 40 && ui.miniX <= a.x + a.width - 40 && ui.miniY >= a.y && ui.miniY <= a.y + a.height - 20) {
-      return { x: ui.miniX, y: ui.miniY, width: w, height: MINI_H };
-    }
-  }
-  const a = screen.getPrimaryDisplay().workArea;
+  const disp = refBounds ? screen.getDisplayMatching(refBounds) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const a = disp.workArea;
+  const saved = (ui.miniPos || {})[disp.id];
+  if (saved && insideWorkArea(saved, w, a)) return { x: saved.x, y: saved.y, width: w, height: MINI_H };
   return { x: Math.round(a.x + (a.width - w) / 2), y: a.y + 8, width: w, height: MINI_H };
 }
 function openMini() {
   ui.mini = true; saveUi();
+  const ref = mainWin && mainWin.isVisible() ? mainWin.getBounds() : null;
   if (mainWin) mainWin.hide();
-  if (miniWin) { miniWin.showInactive(); return; }
+  if (miniWin) { miniWin.setBounds(miniBounds(ref)); miniWin.showInactive(); return; }
   miniWin = new BrowserWindow({
-    ...miniBounds(),
+    ...miniBounds(ref),
     minWidth: 240, maxWidth: 700, minHeight: MINI_H, maxHeight: MINI_H,
     frame: false, resizable: true, maximizable: false, fullscreenable: false,
     alwaysOnTop: true, skipTaskbar: true, show: false,
@@ -91,7 +92,14 @@ function openMini() {
   miniWin.setVisibleOnAllWorkspaces(true);
   miniWin.loadFile(path.join(__dirname, 'mini.html'));
   miniWin.once('ready-to-show', () => { miniWin.webContents.send('mini:state', trayState); miniWin.showInactive(); });
-  const remember = () => { if (!miniWin) return; const b = miniWin.getBounds(); ui.miniX = b.x; ui.miniY = b.y; ui.miniW = b.width; saveUi(); };
+  const remember = () => {
+    if (!miniWin) return;
+    const b = miniWin.getBounds();
+    const d = screen.getDisplayMatching(b);
+    ui.miniPos = { ...(ui.miniPos || {}), [d.id]: { x: b.x, y: b.y } };
+    ui.miniW = b.width;
+    saveUi();
+  };
   miniWin.on('moved', remember);
   miniWin.on('resized', remember);
   miniWin.on('closed', () => { miniWin = null; });
@@ -99,7 +107,15 @@ function openMini() {
 }
 function closeMini() {
   ui.mini = false; saveUi();
-  if (miniWin) miniWin.close();
+  if (miniWin) {
+    // полное окно открываем на том же мониторе, где была полоска
+    const md = screen.getDisplayMatching(miniWin.getBounds());
+    if (mainWin && screen.getDisplayMatching(mainWin.getBounds()).id !== md.id) {
+      const mb = mainWin.getBounds(), a = md.workArea;
+      mainWin.setBounds({ x: Math.round(a.x + (a.width - mb.width) / 2), y: Math.round(a.y + Math.max(0, (a.height - mb.height) / 2)), width: mb.width, height: Math.min(mb.height, a.height) });
+    }
+    miniWin.close();
+  }
   showMain();
   updateTray();
 }
@@ -258,6 +274,17 @@ ipcMain.handle('popup:answer', (_e, answer) => {
   if (['switch', 'choose', 'open'].includes(answer.action)) showMain();
   return true;
 });
+
+ipcMain.handle('diag:main', () => ({
+  version: app.getVersion(), platform: process.platform, osRelease: require('os').release(), packaged: app.isPackaged,
+  displays: screen.getAllDisplays().map((d) => ({ id: d.id, primary: d.id === screen.getPrimaryDisplay().id, workArea: d.workArea, scale: d.scaleFactor })),
+  cursorDisplay: screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id,
+  idleNowSec: powerMonitor.getSystemIdleTime(), idleState: powerMonitor.getSystemIdleState(60),
+  notificationsSupported: Notification.isSupported(),
+  popup: popupWin ? { visible: popupWin.isVisible(), bounds: popupWin.getBounds(), onTop: popupWin.isAlwaysOnTop(), kind: popupPayload && popupPayload.kind } : null,
+  mini: miniWin ? { visible: miniWin.isVisible(), bounds: miniWin.getBounds() } : null,
+  update: updateStatus,
+}));
 
 ipcMain.handle('tray:update', (_e, state) => {
   trayState = state;

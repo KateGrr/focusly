@@ -42,6 +42,9 @@ fs.mkdirSync('test-output', { recursive: true });
       break;
     }
   }
+  const diag = await win.evaluate(() => diagnostics());
+  console.log('DIAGNOSTICS:', diag);
+  fs.writeFileSync('test-output/diagnostics.json', diag);
   await app.close();
   if (!found) { console.error('NO POPUP within 90s'); process.exit(1); }
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

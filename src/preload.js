@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // версия и обновления
   getVersion: () => ipcRenderer.invoke('app:version'),
+  diagMain: () => ipcRenderer.invoke('diag:main'),
   getUpdateStatus: () => ipcRenderer.invoke('update:status'),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
