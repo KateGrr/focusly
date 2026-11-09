@@ -23,20 +23,21 @@
 ## Features
 
 - **Clients & tasks** — pick a client, type a task, press Enter and the timer starts. Recent tasks are one click away.
-- **Instant switching** — start another task and the previous one stops automatically.
+- **Instant switching** — start another task and the previous one stops automatically. New tasks appear at the top of the day.
 - **Fresh start every day** — each day begins at zero; previous days stay available and editable.
 - **Manual corrections** — edit start/end times, add or delete intervals. Forgot to stop? Just type when you finished.
+- **Drag time between tasks** — logged to the wrong task? Drag the interval (⠿) onto the right one.
 - **Idle auto-pause** — no mouse or keyboard for 10 minutes (configurable), screen lock or sleep → Focusly notices.
   When you're back it asks what to do with that time: discard it, keep it, or log it to another task.
 - **Reminders** — "Still on it?" every 30 minutes, "Timer is not running" when you work without tracking,
   and an end-of-workday summary. Work days are configurable — no nagging on weekends.
-- **Mini mode** — a single always-on-top line with `Client: Task`, the timer and stop/start.
+- **Mini mode** — a single always-on-top line with `Client: Task`, the timer and stop/start. Works with multiple monitors.
 - **Weekly report** — client → task → day table; copy to Google Sheets / Excel or export a detailed CSV.
-- **Hide finished work** — hide clients or tasks you're done with; history and reports stay.
+- **Hide or delete** — hide clients and tasks you're done with (history and reports stay), or delete ones added by mistake (with confirmation).
 - **Tray & autostart** — keeps running next to the clock; optional start on login.
 - **English / Русский** interface.
 - **Private by design** — all data stays on your computer in a single JSON file. No accounts, no cloud.
-- **Auto-updates** from GitHub Releases.
+- **Quiet auto-updates** — new versions download in the background; a green dot on ⚙ means one is ready. No pop-ups.
 
 <p align="center">
   <img src="docs/away.png" width="340" alt="Back from a break">
@@ -87,7 +88,9 @@ Updates install automatically.
 | `Ctrl+M` | mini mode |
 | `Ctrl+.` | stop the timer |
 
-- Click a task in the day view to edit its time intervals.
+- Click a task in the day view to edit its time intervals; drag ⠿ to move an interval to another task.
+- Week view hides empty weekend days; the Total column always stays visible.
+- Something not working? ⚙ → About → *Copy diagnostics* and send it along with your question.
 - Closing the window keeps Focusly running in the tray. Quit from the tray menu.
 - Your data is a single JSON file (Settings → *Open data folder*): `%APPDATA%\Focusly` on Windows,
   `~/Library/Application Support/Focusly` on macOS, `~/.config/Focusly` on Linux.
@@ -129,11 +132,11 @@ src/i18n.js      English and Russian texts
 **Focusly** — простой минималистичный тайм-трекер для работы с клиентами: время по клиентам и задачам, переключение в один клик, отчёт за неделю.
 
 **Что умеет:** клиенты и задачи с запуском в один клик и мгновенным переключением; каждый день начинается с нуля,
-прошлые дни можно открыть и поправить; ручная правка интервалов; автопауза при бездействии, блокировке экрана и сне
+прошлые дни можно открыть и поправить; ручная правка интервалов и перенос времени на другую задачу перетаскиванием; новые задачи появляются сверху; автопауза при бездействии, блокировке экрана и сне
 с вопросом при возвращении («убрать время», «оставить» или «записать на другую задачу»); напоминания «продолжаем?»,
 «таймер не запущен» и «конец рабочего дня» с учётом рабочих дней; мини-режим поверх всех окон; недельный отчёт
-с копированием в Google Sheets / Excel и экспортом CSV; скрытие завершённых клиентов и задач; трей и автозапуск;
-интерфейс на английском и русском; автообновление. Все данные хранятся только у тебя на компьютере.
+с копированием в Google Sheets / Excel и экспортом CSV; скрытие завершённых клиентов и задач или удаление ошибочных (с подтверждением); трей и автозапуск;
+интерфейс на английском и русском; тихое автообновление (зелёная точка на ⚙, без всплывающих окон). Все данные хранятся только у тебя на компьютере.
 
 **Установка на Windows:**
 1. Скачай **`Focusly-Setup-x.y.z.exe`** со страницы [последнего релиза](https://github.com/KateGrr/focusly/releases/latest) и запусти.
