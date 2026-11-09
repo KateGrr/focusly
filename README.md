@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/KateGrr/focusly/releases/latest"><b>⬇ Download for Windows</b></a>
+  <a href="https://github.com/KateGrr/focusly/releases/latest"><b>⬇ Download</b></a> — Windows · macOS · Linux
   &nbsp;·&nbsp; <a href="#русский">Русский</a>
 </p>
 
@@ -46,12 +46,37 @@
 
 ## Install
 
-1. Download **`Focusly-Setup-x.y.z.exe`** from the [latest release](https://github.com/KateGrr/focusly/releases/latest) and run it.
+All downloads are on the [latest release](https://github.com/KateGrr/focusly/releases/latest) page.
+
+### Windows
+1. Download **`Focusly-Setup-x.y.z.exe`** and run it.
 2. Windows may show a blue *"Windows protected your PC"* screen because the app isn't code-signed.
    Click **More info → Run anyway**. You only need to do this once.
-3. Focusly appears in the Start menu and in the tray next to the clock. Language is in ⚙ Settings.
+3. Focusly appears in the Start menu and in the tray next to the clock.
 
 Updates install automatically: when a new version is ready, Focusly offers to restart.
+
+### macOS
+1. Download the right file: **`…-mac-arm64.dmg`** for Apple Silicon (M1/M2/M3/M4) or **`…-mac-x64.dmg`** for Intel Macs
+   ( → About This Mac shows which one you have).
+2. Open the `.dmg` and drag **Focusly** into **Applications**.
+3. The app isn't notarized by Apple, so the first launch needs one extra step:
+   - open Focusly; when macOS says it can't verify the app, go to **System Settings → Privacy & Security**,
+     scroll down and click **Open Anyway**;
+   - if macOS says the app *"is damaged"*, open **Terminal** and run:
+     ```bash
+     xattr -cr /Applications/Focusly.app
+     ```
+     then open Focusly again.
+4. Focusly lives in the menu bar. When a new version is out it shows **Download** in ⚙ → About
+   (automatic installation on macOS requires a paid Apple certificate).
+
+### Linux
+1. Download **`Focusly-x.y.z-linux-x64.AppImage`**.
+2. Make it executable and run: `chmod +x Focusly-*.AppImage && ./Focusly-*.AppImage`
+   (on some distros you need `libfuse2`: `sudo apt install libfuse2`).
+
+Updates install automatically.
 
 ## Tips
 
@@ -64,7 +89,8 @@ Updates install automatically: when a new version is ready, Focusly offers to re
 
 - Click a task in the day view to edit its time intervals.
 - Closing the window keeps Focusly running in the tray. Quit from the tray menu.
-- Your data: `%APPDATA%\Focusly\focusly-data.json` (Settings → *Open data folder*). Back it up whenever you like.
+- Your data is a single JSON file (Settings → *Open data folder*): `%APPDATA%\Focusly` on Windows,
+  `~/Library/Application Support/Focusly` on macOS, `~/.config/Focusly` on Linux.
 
 ## Development
 
@@ -73,11 +99,13 @@ Requires [Node.js](https://nodejs.org) 20+.
 ```bash
 npm install
 npm start          # run the app
-npm run dist:win   # build the Windows installer into dist/
+npm run dist:win   # Windows installer → dist/
+npm run dist:mac   # macOS .dmg (on a Mac)
+npm run dist:linux # Linux AppImage
 ```
 
 **Releasing a new version:** bump `version` in `package.json` and push to `main`.
-GitHub Actions builds the installer on Windows, creates the `vX.Y.Z` release and uploads it;
+GitHub Actions builds Windows, macOS and Linux versions, creates the `vX.Y.Z` release and uploads them;
 installed apps pick up the update automatically. You can also run it manually: *Actions → Release → Run workflow*.
 
 Project layout:
@@ -107,11 +135,17 @@ src/i18n.js      English and Russian texts
 с копированием в Google Sheets / Excel и экспортом CSV; скрытие завершённых клиентов и задач; трей и автозапуск;
 интерфейс на английском и русском; автообновление. Все данные хранятся только у тебя на компьютере.
 
-**Установка:**
+**Установка на Windows:**
 1. Скачай **`Focusly-Setup-x.y.z.exe`** со страницы [последнего релиза](https://github.com/KateGrr/focusly/releases/latest) и запусти.
 2. Если Windows покажет синее окно «Система Windows защитила ваш компьютер» — это потому, что у приложения
    нет платной цифровой подписи. Нажми **«Подробнее» → «Выполнить в любом случае»**. Это нужно только один раз.
 3. Focusly появится в «Пуске» и в трее у часов. Язык переключается в ⚙ → Language.
 
 Обновления ставятся сами: когда выйдет новая версия, Focusly предложит перезапуститься.
-Данные лежат в `%APPDATA%\Focusly\focusly-data.json`.
+
+**macOS:** скачай `…-mac-arm64.dmg` (Apple M1–M4) или `…-mac-x64.dmg` (Intel), перетащи Focusly в «Программы».
+При первом запуске macOS скажет, что не может проверить приложение: **Системные настройки → Конфиденциальность и безопасность →
+«Всё равно открыть»**. Если пишет, что приложение «повреждено», в Терминале: `xattr -cr /Applications/Focusly.app`.
+Новые версии на Mac скачиваются вручную — Focusly покажет кнопку «Скачать» в ⚙ → О приложении.
+
+**Linux:** скачай `.AppImage`, сделай исполняемым (`chmod +x`) и запусти.

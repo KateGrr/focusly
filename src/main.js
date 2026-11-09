@@ -1,7 +1,7 @@
 // Главный процесс: окна, трей, хранение данных, всплывающие окна, системные события (бездействие/блокировка/сон).
 const {
   app, BrowserWindow, ipcMain, dialog, screen, shell, clipboard,
-  Tray, Menu, nativeImage, Notification, powerMonitor,
+  Tray, Menu, nativeImage, Notification, powerMonitor, net,
 } = require('electron');
 const path = require('path');
 const I18N = require('./i18n.js');
@@ -261,6 +261,8 @@ let updateStatus = { state: 'idle' }; // idle | checking | none | available | do
 function sendUpdate() { send('update:status', updateStatus); }
 function setupAutoUpdate() {
   if (!app.isPackaged) { updateStatus = { state: 'dev' }; return; } // при npm start обновления не проверяем
+  // macOS без платной подписи Apple не умеет ставить обновления сама — только проверяем и предлагаем скачать
+  if (process.platform === 'darwin') { setupManualUpdateCheck(); return; }
   try {
     ({ autoUpdater: updater } = require('electron-updater'));
   } catch (e) { updateStatus = { state: 'error', message: String(e) }; return; }
@@ -284,6 +286,29 @@ function setupAutoUpdate() {
   setTimeout(check, 15000);
   setInterval(check, 6 * 3600000);
 }
+const RELEASES_URL = 'https://github.com/KateGrr/focusly/releases/latest';
+function newerVersion(a, b) { // a > b ?
+  const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0); }
+  return false;
+}
+function setupManualUpdateCheck() {
+  updater = { checkForUpdates: async () => {
+    updateStatus = { state: 'checking' }; sendUpdate();
+    try {
+      const res = await net.fetch('https://api.github.com/repos/KateGrr/focusly/releases/latest', { headers: { Accept: 'application/vnd.github+json' } });
+      const rel = await res.json();
+      const v = String(rel.tag_name || '').replace(/^v/, '');
+      updateStatus = v && newerVersion(v, app.getVersion()) ? { state: 'manual', version: v } : { state: 'none' };
+    } catch (e) { updateStatus = { state: 'error', message: String(e) }; }
+    sendUpdate();
+  } };
+  const check = () => updater.checkForUpdates();
+  setTimeout(check, 15000);
+  setInterval(check, 6 * 3600000);
+}
+ipcMain.handle('update:open', () => { shell.openExternal(RELEASES_URL); return true; });
+
 function installUpdate() {
   if (!updater || updateStatus.state !== 'downloaded') return;
   isQuitting = true;
@@ -296,7 +321,8 @@ ipcMain.handle('update:install', () => { installUpdate(); return true; });
 
 ipcMain.handle('autostart:get', () => app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin);
 ipcMain.handle('autostart:set', (_e, on) => {
-  app.setLoginItemSettings({ openAtLogin: !!on, args: ['--hidden'] });
+  // Windows: запуск с флагом --hidden (сразу в трей); macOS: openAsHidden
+  app.setLoginItemSettings({ openAtLogin: !!on, args: ['--hidden'], openAsHidden: true });
   return true;
 });
 
@@ -335,7 +361,8 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'app.focusly.desktop' : process.execPath);
     migrateFromTimeTracker();
     loadUi();
-    createMainWindow(process.argv.includes('--hidden') || ui.mini);
+    const startHidden = process.argv.includes('--hidden') || (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAsHidden);
+    createMainWindow(startHidden || ui.mini);
     if (ui.mini) mainWin.webContents.once('did-finish-load', openMini);
     createTray();
     watchSystem();

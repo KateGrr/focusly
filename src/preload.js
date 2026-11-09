@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('api', {
   getUpdateStatus: () => ipcRenderer.invoke('update:status'),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
+  openReleases: () => ipcRenderer.invoke('update:open'),
   onUpdateStatus: on('update:status'),
 
   getAutostart: () => ipcRenderer.invoke('autostart:get'),

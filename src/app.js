@@ -793,12 +793,14 @@ function renderUpdate() {
     dev: tr('updDev'), checking: tr('updChecking'), none: tr('updNone'),
     available: tr('updAvailable', { v: updStatus.version || '' }),
     downloaded: tr('updDownloaded', { v: updStatus.version || '' }),
+    manual: tr('updManual', { v: updStatus.version || '' }),
     error: tr('updError'),
   }[st] || '';
   $('updStatus').textContent = text;
   $('updCheck').classList.toggle('hidden', st === 'dev' || st === 'downloaded');
   $('updCheck').disabled = st === 'checking' || st === 'available';
   $('updInstall').classList.toggle('hidden', st !== 'downloaded');
+  $('updDownload').classList.toggle('hidden', st !== 'manual');
 }
 
 function renderWorkDays() {
@@ -948,6 +950,7 @@ function bind() {
   $('clArchiveToggle').addEventListener('click', () => { clShowArchive = !clShowArchive; renderClients(); });
   $('updCheck').addEventListener('click', async () => { updStatus = await window.api.checkUpdate(); renderUpdate(); });
   $('updInstall').addEventListener('click', () => window.api.installUpdate());
+  $('updDownload').addEventListener('click', () => window.api.openReleases());
   window.api.onUpdateStatus((st) => { updStatus = st; if (currentView === 'settings') renderUpdate(); });
   $('openFolder').addEventListener('click', () => window.api.openDataFolder());
 

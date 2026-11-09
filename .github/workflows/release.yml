@@ -1,7 +1,8 @@
-# Сборка Windows-установщика и публикация в GitHub Releases.
+# Сборка Focusly для Windows, macOS и Linux и публикация в GitHub Releases.
 # Запускается, когда в main меняется package.json (например, поднята версия) или этот файл,
 # либо вручную: Actions → Release → Run workflow.
-# Если в релизе этой версии уже есть установщик — сборка пропускается.
+# Порядок: prepare (черновик релиза) → build (3 системы параллельно, каждая загружает свои файлы) → publish.
+# Если релиз этой версии уже опубликован — всё пропускается.
 name: Release
 
 on:
@@ -13,53 +14,71 @@ on:
 permissions:
   contents: write
 
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      skip: ${{ steps.ver.outputs.skip }}
     steps:
       - uses: actions/checkout@v5
-
-      - name: Check if this version is already released
+      - name: Check version and create draft release
         id: ver
-        shell: bash
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if gh release view "v$VERSION" --json assets -q '.assets[].name' 2>/dev/null | grep -qx "Focusly-Setup-$VERSION.exe"; then
-            echo "v$VERSION is already released — skipping."
+          V=$(node -p "require('./package.json').version")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          STATE=$(gh release view "v$V" --json isDraft -q '.isDraft' 2>/dev/null || echo "none")
+          if [ "$STATE" = "false" ]; then
+            echo "v$V is already published — skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Building v$VERSION"
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          if [ "$STATE" = "none" ]; then
+            gh release create "v$V" --draft --title "Focusly $V" --generate-notes --target "$GITHUB_SHA"
           fi
 
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.skip == 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: --win nsis
+          - os: macos-latest
+            args: --mac
+          - os: ubuntu-latest
+            args: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
-        if: steps.ver.outputs.skip == 'false'
         with:
           node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        if: steps.ver.outputs.skip == 'false'
-        run: npm ci
-
-      - name: Build installer
-        if: steps.ver.outputs.skip == 'false'
-        run: npx electron-builder --win nsis --publish never
-
-      - name: Publish release
-        if: steps.ver.outputs.skip == 'false'
+      - run: npm ci
+      - name: Build
+        run: npx electron-builder ${{ matrix.args }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Upload to release
         shell: bash
         run: |
-          V="${{ steps.ver.outputs.version }}"
-          TAG="v$V"
-          FILES="dist/Focusly-Setup-$V.exe dist/Focusly-Setup-$V.exe.blockmap dist/latest.yml"
-          ls -la $FILES
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" $FILES --clobber
-            gh release edit "$TAG" --draft=false --latest
-          else
-            gh release create "$TAG" $FILES --title "Focusly $V" --generate-notes --latest
-          fi
+          shopt -s nullglob
+          FILES=(dist/*.exe dist/*.dmg dist/*.AppImage dist/*.blockmap dist/latest*.yml)
+          ls -la "${FILES[@]}"
+          gh release upload "v${{ needs.prepare.outputs.version }}" "${FILES[@]}" --clobber
+
+  publish:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Publish release
+        run: gh release edit "v${{ needs.prepare.outputs.version }}" --draft=false --latest
