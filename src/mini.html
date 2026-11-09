@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Focusly</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    font: 13px/1 "Segoe UI", -apple-system, system-ui, sans-serif; color: #1d1d1b; background: #fff;
+    border: 1px solid #d6d6cf; border-left: 4px solid #b9b9b1;
+    display: flex; align-items: center; gap: 8px; padding: 0 4px 0 8px;
+    -webkit-app-region: drag; user-select: none;
+  }
+  body.run { border-left-color: #2f9e6b; }
+  body.away { border-left-color: #e0a100; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: #b9b9b1; }
+  .task {
+    flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    -webkit-app-region: no-drag; cursor: pointer; padding: 6px 4px; border-radius: 6px;
+  }
+  .task:hover { background: #f2f2ee; }
+  .task { display: flex; }
+  .task .client { color: #8a8a83; font-weight: 600; flex: none; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+  .task .sep { color: #8a8a83; font-weight: 600; flex: none; }
+  .task .tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .task.idle { display: block; }
+  .task.idle { color: #8a8a83; }
+  .time { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; flex: none; }
+  body.run .time { color: #2f9e6b; }
+  body.away .time { color: #b07e00; }
+  button {
+    -webkit-app-region: no-drag; flex: none; width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid #dcdcd6; background: #fff; cursor: pointer; font-size: 11px; padding: 0; color: #1d1d1b;
+  }
+  button:hover { background: #f2f2ee; }
+  button.stop { background: #c4453c; border-color: #c4453c; color: #fff; }
+  button.stop:hover { background: #a93a32; }
+  button.ghost { border-color: transparent; border-radius: 6px; width: 24px; color: #8a8a83; font-size: 13px; }
+  button.ghost:hover { color: #1d1d1b; }
+</style>
+</head>
+<body>
+  <span class="dot" id="dot"></span>
+  <div class="task" id="task"></div>
+  <span class="time" id="time"></span>
+  <button id="toggle"></button>
+  <button class="ghost" id="expand">⤢</button>
+<script src="i18n.js"></script>
+<script>
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmt = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 3600)}:${pad(Math.floor(s % 3600 / 60))}:${pad(s % 60)}`; };
+  let st = { running: null, recent: [] };
+  let t = I18N.makeT('en');
+
+  function render() {
+    t = I18N.makeT(st.lang || 'en');
+    document.getElementById('expand').title = t('miniExpand');
+    const r = st.running;
+    document.body.className = r ? (r.away ? 'away' : 'run') : '';
+    const task = document.getElementById('task');
+    task.innerHTML = '';
+    if (r) {
+      task.className = 'task';
+      const c = document.createElement('span'); c.className = 'client'; c.textContent = r.clientName; task.append(c);
+      const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = ':\u00a0'; task.append(sep);
+      const n = document.createElement('span'); n.className = 'tname'; n.textContent = r.taskName; task.append(n);
+      task.title = `${r.clientName}: ${r.taskName}\n${t('miniPick')}`;
+      document.getElementById('dot').style.background = r.color || '';
+    } else {
+      task.className = 'task idle';
+      task.textContent = t('miniIdle');
+      task.title = t('miniPickTitle');
+      document.getElementById('dot').style.background = '';
+    }
+    const btn = document.getElementById('toggle');
+    const last = st.recent[0];
+    btn.className = r ? 'stop' : '';
+    btn.textContent = r ? '■' : '▶';
+    btn.title = r ? t('stop') : (last ? t('miniStartLast', { t: last.label }) : t('miniPickTitle'));
+    tick();
+  }
+  function tick() {
+    const r = st.running;
+    document.getElementById('time').textContent = r ? fmt(r.todayMs + (Date.now() - st.asOf)) : '';
+  }
+
+  window.api.onMiniState((s) => { st = s; render(); });
+  document.getElementById('task').addEventListener('click', () => window.api.miniMenu());
+  document.getElementById('toggle').addEventListener('click', () => {
+    if (st.running) window.api.miniCmd({ type: 'stop' });
+    else if (st.recent[0]) window.api.miniCmd({ type: 'start', taskId: st.recent[0].id });
+    else window.api.miniMenu();
+  });
+  document.getElementById('expand').addEventListener('click', () => window.api.setMini(false));
+  document.body.addEventListener('dblclick', (e) => { if (e.target === document.body) window.api.setMini(false); });
+  setInterval(tick, 1000);
+</script>
+</body>
+</html>

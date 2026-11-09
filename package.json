@@ -1,0 +1,58 @@
+{
+  "name": "focusly",
+  "productName": "Focusly",
+  "version": "1.0.0",
+  "description": "Focusly — simple time tracker for freelancers",
+  "main": "src/main.js",
+  "author": "Focusly",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis",
+    "dist:mac": "electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "app.focusly.desktop",
+    "productName": "Focusly",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "src/icons/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Focusly",
+      "artifactName": "Focusly-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "src/icons/icon.png"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "KateGrr",
+        "repo": "focusly",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "homepage": "https://github.com/KateGrr/focusly",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KateGrr/focusly.git"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  }
+}

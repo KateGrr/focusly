@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Focusly</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <nav class="tabs">
+      <button data-view="day" class="active" data-i18n="tabDay"></button>
+      <button data-view="week" data-i18n="tabWeek"></button>
+      <button id="miniBtn" class="mini-btn" data-i18n="mini" data-i18n-title="miniTitle"></button>
+      <button data-view="settings" data-i18n-title="settings">⚙</button>
+    </nav>
+  </header>
+
+  <!-- Сейчас идёт -->
+  <section id="running" class="running hidden">
+    <div class="running-info">
+      <div class="running-time" id="runningTime">0:00:00</div>
+      <div class="running-task"><span class="dot" id="runningDot"></span><span id="runningTask"></span></div>
+    </div>
+    <button class="stop-btn" id="runningStop" data-i18n-title="stop">■</button>
+  </section>
+
+  <!-- ДЕНЬ -->
+  <main id="view-day" class="view">
+    <div class="datebar">
+      <button class="icon" id="dayPrev" data-i18n-title="prevDay">‹</button>
+      <div class="date-title">
+        <div id="dayTitle"></div>
+        <div class="muted small" id="dayTotal"></div>
+      </div>
+      <button class="icon" id="dayNext" data-i18n-title="nextDay">›</button>
+      <button class="link" id="dayToday" data-i18n="today"></button>
+    </div>
+
+    <ul class="tasks" id="taskList"></ul>
+    <div class="empty muted" id="taskEmpty" data-i18n="noTasks"></div>
+
+    <form class="add" id="addForm" autocomplete="off">
+      <div class="chips" id="clientChips"></div>
+      <div class="new-client hidden" id="newClientRow">
+        <input id="newClientInput" data-i18n-ph="clientName" maxlength="60">
+        <button type="button" id="newClientSave">OK</button>
+        <button type="button" class="ghost" id="newClientCancel">✕</button>
+      </div>
+      <div class="add-row">
+        <input id="taskInput" list="taskSuggest" maxlength="120">
+        <datalist id="taskSuggest"></datalist>
+        <button type="submit" class="primary" id="addStart" data-i18n-title="addStart">▶</button>
+        <button type="button" id="addOnly" data-i18n-title="addOnly">＋</button>
+      </div>
+      <div class="chips recent" id="recentChips"></div>
+    </form>
+  </main>
+
+  <!-- НЕДЕЛЯ -->
+  <main id="view-week" class="view hidden">
+    <div class="datebar">
+      <button class="icon" id="weekPrev">‹</button>
+      <div class="date-title">
+        <div id="weekTitle"></div>
+        <div class="muted small" id="weekTotal"></div>
+      </div>
+      <button class="icon" id="weekNext">›</button>
+      <button class="link" id="weekThis" data-i18n="thisWeek"></button>
+    </div>
+    <div class="table-wrap"><table class="report" id="weekTable"></table></div>
+    <div class="week-empty muted hidden" id="weekEmpty" data-i18n="noWeek"></div>
+    <div class="actions">
+      <button id="weekCopy" data-i18n="copyTable"></button>
+      <button id="weekCsv" data-i18n="exportCsv"></button>
+    </div>
+    <div class="muted small" id="weekMsg"></div>
+  </main>
+
+  <!-- НАСТРОЙКИ -->
+  <main id="view-settings" class="view hidden">
+    <h3 data-i18n="sLanguage"></h3>
+    <div class="lang-switch" id="langSwitch"></div>
+
+    <h3 data-i18n="sReminders"></h3>
+    <label class="setting"><input type="checkbox" data-s="remindersOn">
+      <span data-i18n="sAskEvery"></span> <input type="number" data-s="reminderMinutes" min="1" max="600" class="num"> <span data-i18n="min"></span></label>
+    <label class="setting"><input type="checkbox" data-s="notRunningOn">
+      <span data-i18n="sNotRunning"></span> <input type="number" data-s="notRunningMinutes" min="1" max="120" class="num"> <span data-i18n="sNotRunningTail"></span></label>
+    <label class="setting"><input type="checkbox" data-s="eodOn">
+      <span data-i18n="sEod"></span> <input type="time" data-s="eodTime" class="time"></label>
+    <div class="setting"><span data-i18n="sWorkDays"></span></div>
+    <div class="chips workdays" id="workDays"></div>
+    <div class="muted small hint" data-i18n="sWorkDaysHint"></div>
+
+    <h3 data-i18n="sAutopause"></h3>
+    <label class="setting"><input type="checkbox" data-s="idleOn">
+      <span data-i18n="sIdle"></span> <input type="number" data-s="idleMinutes" min="1" max="120" class="num"> <span data-i18n="min"></span></label>
+    <label class="setting"><input type="checkbox" data-s="lockPause"> <span data-i18n="sLock"></span></label>
+
+    <h3 data-i18n="sNotifications"></h3>
+    <label class="setting"><input type="checkbox" data-s="sound"> <span data-i18n="sSound"></span></label>
+    <label class="setting"><input type="checkbox" data-s="systemNotify"> <span data-i18n="sSystem"></span></label>
+    <button id="testPopup" data-i18n="sTest"></button>
+
+    <h3 data-i18n="sApp"></h3>
+    <label class="setting"><input type="checkbox" id="autostart"> <span data-i18n="sAutostart"></span></label>
+
+    <h3 data-i18n="sClients"></h3>
+    <div class="cl-toolbar">
+      <input id="clSearch" type="search" data-i18n-ph="searchPh">
+      <button id="clAdd" data-i18n="addClient"></button>
+    </div>
+    <div class="new-client hidden" id="clNewRow">
+      <input id="clNewInput" data-i18n-ph="clientName" maxlength="60">
+      <button type="button" id="clNewSave">OK</button>
+      <button type="button" class="ghost" id="clNewCancel">✕</button>
+    </div>
+    <ul class="cl-list" id="clActive"></ul>
+    <button class="link cl-archive-toggle" id="clArchiveToggle"></button>
+    <ul class="cl-list archived hidden" id="clArchived"></ul>
+
+    <h3 data-i18n="sData"></h3>
+    <div class="muted small path" id="dataPath"></div>
+    <button id="openFolder" data-i18n="openFolder"></button>
+
+    <h3 data-i18n="sAbout"></h3>
+    <div class="about">
+      <img src="icons/icon.png" alt="" class="about-logo">
+      <div>
+        <div><b>Focusly</b> <span class="muted" id="appVersion"></span></div>
+        <div class="muted small" id="updStatus"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="updCheck" data-i18n="updCheck"></button>
+      <button id="updInstall" class="primary hidden" data-i18n="updInstall"></button>
+    </div>
+  </main>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

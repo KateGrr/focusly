@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Focusly</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 14px/1.4 "Segoe UI", -apple-system, system-ui, sans-serif; color: #1d1d1b; background: #fff;
+    border: 1px solid #dcdcd6; border-top: 4px solid var(--accent, #1d1d1b);
+    padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 6px;
+    -webkit-app-region: drag; user-select: none;
+  }
+  body.k-idle { --accent: #e0a100; }
+  body.k-reminder { --accent: #2f9e6b; }
+  body.k-notRunning { --accent: #c4453c; }
+  body.k-endOfDay { --accent: #3d85c6; }
+  .head { display: flex; align-items: center; gap: 8px; }
+  .title { font-weight: 600; font-size: 15px; flex: 1; }
+  .close { -webkit-app-region: no-drag; border: none; background: transparent; color: #8a8a83; font-size: 14px; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+  .close:hover { background: #f2f2ee; color: #1d1d1b; }
+  .sub { color: #5c5c57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .muted { color: #8a8a83; font-size: 12px; }
+  .row { display: flex; gap: 6px; -webkit-app-region: no-drag; }
+  .grow { margin-top: auto; }
+  button {
+    flex: 1; border: 1px solid #dcdcd6; background: #fff; border-radius: 8px; padding: 7px 6px;
+    font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  button:hover { background: #f2f2ee; }
+  button.primary { background: #1d1d1b; color: #fff; border-color: #1d1d1b; }
+  button.primary:hover { background: #3a3a37; }
+  button.fit { flex: none; padding: 7px 12px; }
+  select { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 6px; border: 1px solid #dcdcd6; border-radius: 8px; background: #fff; }
+  a { -webkit-app-region: no-drag; color: #8a8a83; font-size: 12px; cursor: pointer; text-decoration: underline; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="head"><div class="title" id="title"></div><button class="close hidden" id="close">✕</button></div>
+  <div id="content" style="display:flex;flex-direction:column;gap:6px;flex:1"></div>
+<script src="i18n.js"></script>
+<script>
+  const pad = (n) => String(n).padStart(2, '0');
+  const hhmm = (ts) => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  let t = I18N.makeT('en');
+  const dur = (ms) => I18N.durWords(t, ms);
+  const dayLabel = (ts) => new Date(ts).toDateString() === new Date().toDateString() ? '' : new Date(ts).toLocaleDateString(t('locale'), { day: 'numeric', month: 'short' }) + ' ';
+
+  let kind = null;
+  const answer = (action, extra = {}) => window.api.answerPopup({ kind, action, ...extra });
+
+  function h(tag, attrs = {}, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v);
+    }
+    e.append(...kids.filter((k) => k != null)); return e;
+  }
+  const btn = (label, action, cls = '', extra) => h('button', { class: cls, onclick: () => answer(action, extra ? extra() : {}) }, label);
+
+  // короткий двухтоновый сигнал без файлов
+  function chime() {
+    try {
+      const ctx = new AudioContext();
+      [[880, 0], [1320, 0.18]].forEach(([f, t]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.45);
+        o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.5);
+      });
+      setTimeout(() => ctx.close(), 1200);
+    } catch {}
+  }
+
+  const render = {
+    reminder(d) {
+      return [
+        h('div', { class: 'sub' }, `${d.clientName}: ${d.taskName}`),
+        h('div', { class: 'muted' }, t('pRunningFor', { d: dur(d.elapsedMs) })),
+        h('div', { class: 'row grow' }, btn(t('pContinue'), 'continue', 'primary'), btn(t('pSwitch'), 'switch'), btn(t('stop'), 'stop')),
+        h('a', { onclick: () => answer('stopAtLastCheck') }, t('pStopAt', { t: hhmm(d.lastCheck) })),
+      ];
+    },
+    idle(d) {
+      const sel = h('select', {}, h('option', { value: '' }, t('pAssignTo')),
+        ...d.tasks.map((t) => h('option', { value: t.id }, t.label)));
+      const assign = h('button', { class: 'fit', disabled: '' }, t('pAssign'));
+      sel.addEventListener('change', () => { assign.disabled = !sel.value; });
+      assign.addEventListener('click', () => sel.value && answer('assign', { taskId: sel.value }));
+      return [
+        h('div', { class: 'sub' }, `${dayLabel(d.from)}${hhmm(d.from)} – ${dayLabel(d.to)}${hhmm(d.to)} · ${d.taskName}`),
+        h('div', { class: 'muted' }, t('pWhatToDo')),
+        h('div', { class: 'row grow' }, btn(t('pDiscardContinue'), 'discardContinue', 'primary'), btn(t('pDiscardStop'), 'discardStop')),
+        h('div', { class: 'row' }, btn(t('pKeep'), 'keep')),
+        h('div', { class: 'row' }, sel, assign),
+      ];
+    },
+    notRunning(d) {
+      return [
+        h('div', { class: 'muted' }, t('pActiveFor', { d: dur(d.activeMs) })),
+        h('div', { class: 'row grow' },
+          d.lastTask ? btn(`▶ ${d.lastTask.label}`, 'startLast', 'primary', () => ({ taskId: d.lastTask.id })) : null,
+          btn(t('pChoose'), 'choose', d.lastTask ? '' : 'primary'),
+          btn(t('pLater'), 'later', 'fit')),
+      ];
+    },
+    endOfDay(d) {
+      const kids = [h('div', { class: 'sub' }, t('pTodayWorked', { d: dur(d.todayMs) }))];
+      if (d.running) {
+        kids.push(h('div', { class: 'muted' }, t('pStillRunning', { t: `${d.running.clientName}: ${d.running.taskName}` })));
+        kids.push(h('div', { class: 'row grow' }, btn(t('pStop'), 'stop', 'primary'), btn(t('pMore30'), 'snooze'), btn(t('pOpen'), 'open', 'fit')));
+      } else {
+        kids.push(h('div', { class: 'muted' }, t('pGoodEvening')));
+        kids.push(h('div', { class: 'row grow' }, btn(t('pOpenReport'), 'open'), btn(t('pOk'), 'ok', 'primary')));
+      }
+      return kids;
+    },
+  };
+
+  window.api.onPopupData((d) => {
+    kind = d.kind;
+    t = I18N.makeT(d.lang || 'en');
+    document.getElementById('close').title = t('close');
+    document.body.className = 'k-' + kind;
+    document.getElementById('title').textContent = d.title;
+    // окно «бездействие» закрыть без выбора нельзя — иначе непонятно, что делать со временем
+    document.getElementById('close').classList.toggle('hidden', kind === 'idle');
+    const c = document.getElementById('content');
+    c.innerHTML = '';
+    c.append(...render[kind](d).filter(Boolean));
+    if (d.sound) chime();
+  });
+  document.getElementById('close').addEventListener('click', () => answer('dismiss'));
+</script>
+</body>
+</html>
