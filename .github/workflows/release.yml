@@ -17,7 +17,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check if this version is already released
         id: ver
@@ -35,7 +35,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: steps.ver.outputs.skip == 'false'
         with:
           node-version: 22
@@ -44,6 +44,16 @@ jobs:
       - name: Install dependencies
         if: steps.ver.outputs.skip == 'false'
         run: npm ci
+
+      - name: Create tag
+        if: steps.ver.outputs.skip == 'false'
+        shell: bash
+        run: |
+          TAG="v${{ steps.ver.outputs.version }}"
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
 
       - name: Build and publish
         if: steps.ver.outputs.skip == 'false'
