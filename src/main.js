@@ -169,6 +169,13 @@ function updateTray() {
     }
   }
   items.push({ type: 'separator' });
+  if (typeof updateStatus !== 'undefined' && updateStatus.state === 'downloaded') {
+    items.push({ label: T()('trayRestartUpdate', { v: updateStatus.version }), click: installUpdate });
+    items.push({ type: 'separator' });
+  } else if (typeof updateStatus !== 'undefined' && updateStatus.state === 'manual') {
+    items.push({ label: T()('trayDownloadUpdate', { v: updateStatus.version }), click: () => shell.openExternal(RELEASES_URL) });
+    items.push({ type: 'separator' });
+  }
   items.push({ label: T()('trayMini'), type: 'checkbox', checked: !!miniWin, click: () => (miniWin ? closeMini() : openMini()) });
   items.push({ label: T()('trayOpen'), click: () => (miniWin ? closeMini() : showMain()) });
   items.push({ label: T()('trayQuit'), click: () => { isQuitting = true; app.quit(); } });
@@ -272,15 +279,11 @@ function setupAutoUpdate() {
   updater.on('update-not-available', () => { updateStatus = { state: 'none' }; sendUpdate(); });
   updater.on('update-available', (i) => { updateStatus = { state: 'available', version: i.version }; sendUpdate(); });
   updater.on('error', (e) => { updateStatus = { state: 'error', message: String((e && e.message) || e) }; sendUpdate(); });
-  updater.on('update-downloaded', async (i) => {
+  // без всплывающих окон: тихий индикатор (точка на ⚙, About, пункт в трее); если не нажать — поставится при выходе
+  updater.on('update-downloaded', (i) => {
     updateStatus = { state: 'downloaded', version: i.version };
     sendUpdate();
-    const t = T();
-    const r = await dialog.showMessageBox({
-      type: 'info', title: 'Focusly', buttons: [t('updRestart'), t('updLater')], defaultId: 0, cancelId: 1,
-      message: t('updReady', { v: i.version }), detail: t('updDetail'),
-    });
-    if (r.response === 0) installUpdate(); // «Позже» — установится само при следующем выходе
+    updateTray();
   });
   const check = () => updater.checkForUpdates().catch(() => {});
   setTimeout(check, 15000);
@@ -302,6 +305,7 @@ function setupManualUpdateCheck() {
       updateStatus = v && newerVersion(v, app.getVersion()) ? { state: 'manual', version: v } : { state: 'none' };
     } catch (e) { updateStatus = { state: 'error', message: String(e) }; }
     sendUpdate();
+    updateTray();
   } };
   const check = () => updater.checkForUpdates();
   setTimeout(check, 15000);

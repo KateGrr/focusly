@@ -801,6 +801,8 @@ function renderUpdate() {
   $('updCheck').disabled = st === 'checking' || st === 'available';
   $('updInstall').classList.toggle('hidden', st !== 'downloaded');
   $('updDownload').classList.toggle('hidden', st !== 'manual');
+  // точка на ⚙ — есть обновление
+  document.querySelector('.tabs [data-view=settings]').classList.toggle('has-update', st === 'downloaded' || st === 'manual');
 }
 
 function renderWorkDays() {
@@ -951,7 +953,7 @@ function bind() {
   $('updCheck').addEventListener('click', async () => { updStatus = await window.api.checkUpdate(); renderUpdate(); });
   $('updInstall').addEventListener('click', () => window.api.installUpdate());
   $('updDownload').addEventListener('click', () => window.api.openReleases());
-  window.api.onUpdateStatus((st) => { updStatus = st; if (currentView === 'settings') renderUpdate(); });
+  window.api.onUpdateStatus((st) => { updStatus = st; renderUpdate(); });
   $('openFolder').addEventListener('click', () => window.api.openDataFolder());
 
   // горячие клавиши: Ctrl+N — новая задача, Ctrl+M — мини-режим, Ctrl+. — стоп
@@ -985,6 +987,7 @@ async function init() {
   updStatus = await window.api.getUpdateStatus();
   bind();
   setView('day');
+  renderUpdate();
 
   // приложение было закрыто/компьютер выключен, а таймер шёл — спросим, что делать с этим временем
   const r = running();

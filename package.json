@@ -1,7 +1,7 @@
 {
   "name": "focusly",
   "productName": "Focusly",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Focusly — a simple, minimal time tracker for client work",
   "main": "src/main.js",
   "author": {

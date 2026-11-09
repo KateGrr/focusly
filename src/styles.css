@@ -186,3 +186,8 @@ h3:first-child { margin-top: 6px; }
 .report th.sum, .report td.sum { right: 0; padding-left: 8px; box-shadow: -6px 0 6px -6px rgba(0,0,0,.18); }
 .report tr.total td.sum { font-weight: 700; }
 .report tr.task { background: transparent; box-shadow: none; border-radius: 0; }
+.tabs [data-view=settings] { position: relative; }
+.tabs [data-view=settings].has-update::after {
+  content: ''; position: absolute; top: 4px; right: 5px; width: 7px; height: 7px; border-radius: 50%;
+  background: #2f9e6b; box-shadow: 0 0 0 2px var(--bg);
+}
