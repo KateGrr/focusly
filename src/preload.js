@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   answerPopup: (answer) => ipcRenderer.invoke('popup:answer', answer),
   onPopupAnswer: on('popup:answer'),
   onPopupData: on('popup:data'),
+  onPopupClosed: on('popup:closed'),
 
   // трей и окно
   updateTray: (state) => ipcRenderer.invoke('tray:update', state),

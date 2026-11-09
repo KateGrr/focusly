@@ -194,10 +194,13 @@ function createTray() {
 // ---------- всплывающее окно (напоминания, бездействие, конец дня) ----------
 const POPUP_H = { reminder: 176, idle: 250, notRunning: 150, endOfDay: 170 };
 
+let popupAnswered = false;
 function showPopup(payload) {
   popupPayload = payload;
+  popupAnswered = false;
   const w = 380, h = POPUP_H[payload.kind] || 200;
-  const { workArea } = screen.getPrimaryDisplay();
+  // показываем на том мониторе, где сейчас курсор — там, где человек работает
+  const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const bounds = { x: workArea.x + workArea.width - w - 16, y: workArea.y + workArea.height - h - 16, width: w, height: h };
 
   if (payload.systemNotify && Notification.isSupported()) {
@@ -228,7 +231,11 @@ function showPopup(payload) {
     popupWin.webContents.send('popup:data', popupPayload);
     popupWin.showInactive(); // не крадём фокус, пока ты печатаешь
   });
-  popupWin.on('closed', () => { popupWin = null; });
+  popupWin.on('closed', () => {
+    popupWin = null;
+    // окно закрыли не кнопкой (через панель задач, Alt+F4) — сообщаем, иначе следующие напоминания будут ждать его ответа
+    if (!popupAnswered) send('popup:closed');
+  });
 }
 
 function closePopup() {
@@ -243,8 +250,9 @@ ipcMain.handle('data:path', () => DATA_FILE());
 ipcMain.handle('data:openFolder', () => shell.showItemInFolder(DATA_FILE()));
 
 ipcMain.handle('popup:show', (_e, payload) => { showPopup(payload); return true; });
-ipcMain.handle('popup:close', () => { closePopup(); return true; });
+ipcMain.handle('popup:close', () => { popupAnswered = true; closePopup(); return true; });
 ipcMain.handle('popup:answer', (_e, answer) => {
+  popupAnswered = true;
   closePopup();
   send('popup:answer', answer);
   if (['switch', 'choose', 'open'].includes(answer.action)) showMain();

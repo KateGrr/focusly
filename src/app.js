@@ -964,6 +964,7 @@ function bind() {
   });
 
   window.api.onPopupAnswer(onPopupAnswer);
+  window.api.onPopupClosed(() => { popupKind = null; });
   window.api.onCommand(onTrayCommand);
   window.api.onIdle(onIdleSeconds);
   window.api.onLock(() => { if (data.settings.lockPause) beginAway(Date.now()); });
