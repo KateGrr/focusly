@@ -451,7 +451,11 @@ function renderDay() {
     if (!t) continue;
     const c = client(t.clientId);
     const active = r && r.taskId === id && keyOf(r.start) === viewDay;
-    const li = el('li', { class: 'task' + (active ? ' active' : ''), 'data-id': id },
+    const li = el('li', { class: 'task' + (active ? ' active' : ''), 'data-id': id,
+      ondragover: (ev) => { if (dragEntry && dragEntry.fromTaskId !== id) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; li.classList.add('drop-target'); } },
+      ondragleave: (ev) => { if (!li.contains(ev.relatedTarget)) li.classList.remove('drop-target'); },
+      ondrop: (ev) => { ev.preventDefault(); li.classList.remove('drop-target'); if (dragEntry && dragEntry.fromTaskId !== id) moveEntry(dragEntry.id, id); },
+    },
       el('div', { class: 'task-row' },
         el('div', { class: 'task-main', title: tr('clickToEdit'), onclick: () => { expandedTaskId = expandedTaskId === id ? null : id; renderDay(); } },
           el('div', { class: 'task-name' }, t.name),
@@ -465,6 +469,20 @@ function renderDay() {
     list.append(li);
   }
   renderAddForm();
+}
+
+// перенос интервала на другую задачу (перетаскиванием)
+let dragEntry = null;
+function moveEntry(entryId, toTaskId) {
+  const e = data.entries.find((x) => x.id === entryId);
+  if (!e || !task(toTaskId)) return;
+  e.taskId = toTaskId;
+  addToDay(keyOf(e.start), toTaskId);
+  if (e.end == null) { e.lastCheck = Date.now(); data.lastClientId = task(toTaskId).clientId; } // идущий таймер теперь считает новую задачу
+  expandedTaskId = toTaskId; // раскрываем задачу, куда перенесли, — видно результат
+  dragEntry = null;
+  document.body.classList.remove('dragging-entry');
+  save(); render();
 }
 
 function parseTimeOnDay(key, value) {
@@ -505,8 +523,18 @@ function renderEntriesEditor(taskId) {
     };
     startIn.addEventListener('change', apply);
     endIn.addEventListener('change', apply);
+    // ручка для перетаскивания интервала на другую задачу
+    const grip = el('span', { class: 'grip', draggable: 'true', title: tr('dragHint') }, '⠿');
+    grip.addEventListener('dragstart', (ev) => {
+      dragEntry = { id: e.id, fromTaskId: taskId };
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', e.id);
+      ev.dataTransfer.setDragImage(grip.parentElement, 10, 14);
+      document.body.classList.add('dragging-entry');
+    });
+    grip.addEventListener('dragend', () => { dragEntry = null; document.body.classList.remove('dragging-entry'); document.querySelectorAll('.task.drop-target').forEach((x) => x.classList.remove('drop-target')); });
     box.append(el('div', { class: 'entry', 'data-id': e.id },
-      startIn, '—', e.end == null ? el('span', { class: 'entry-now' }, endIn) : endIn,
+      grip, startIn, '—', e.end == null ? el('span', { class: 'entry-now' }, endIn) : endIn,
       el('span', { class: 'dur' }, fmtDur(entryEnd(e) - e.start)),
       e.end == null ? el('span', { class: 'small', style: 'color:var(--run)' }, tr('running')) : null,
       el('button', { class: 'ghost', title: tr('deleteInterval'), onclick: () => {
@@ -534,8 +562,8 @@ function renderEntriesEditor(taskId) {
   box.append(el('div', { class: 'entry' }, ns, '—', ne, addBtn));
 
   box.append(err);
+  box.append(el('div', { class: 'muted small entries-hint' }, tr('editHint')));
   box.append(el('div', { class: 'entries-actions' },
-    el('span', { class: 'muted small' }, tr('editHint')),
     el('span', { class: 'spacer' }),
     el('button', { class: 'link', onclick: () => {
       const has = entries.length > 0;

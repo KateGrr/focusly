@@ -195,3 +195,12 @@ h3:first-child { margin-top: 6px; }
 }
 .diag { margin-top: 10px; }
 .diag .link { padding: 0; font-size: 12px; }
+
+/* перетаскивание интервала на другую задачу */
+.grip { cursor: grab; color: #b9b9b1; font-size: 14px; line-height: 1; padding: 4px 2px; user-select: none; }
+.grip:hover { color: var(--text); }
+.grip:active { cursor: grabbing; }
+body.dragging-entry .task:not(.drop-target) { transition: box-shadow .1s; }
+.task.drop-target { box-shadow: 0 0 0 2px var(--accent); background: #f2f2ee; }
+.entries-hint { margin-top: 2px; }
+.entries-actions .link { white-space: nowrap; }
