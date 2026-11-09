@@ -1,0 +1,36 @@
+# Проверка напоминаний в настоящем Electron на Windows (и для сравнения на Linux).
+# Запускается при изменении папки test/ или вручную.
+name: E2E reminders
+
+on:
+  push:
+    branches: [main]
+    paths: ['test/**', '.github/workflows/e2e.yml']
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright-core
+      - name: Run (Windows)
+        if: runner.os == 'Windows'
+        run: node test/e2e-reminder.js
+      - name: Run (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node test/e2e-reminder.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-${{ matrix.os }}
+          path: test-output/
