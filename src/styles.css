@@ -109,8 +109,9 @@ input:focus { border-color: #b9b9b1; }
 /* неделя */
 .table-wrap { overflow-x: auto; }
 .report { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
-.report th, .report td { padding: 5px 4px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.report th:first-child, .report td:first-child { text-align: left; white-space: normal; min-width: 110px; }
+.report th, .report td { padding: 5px 3px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.report th:first-child, .report td:first-child { text-align: left; white-space: normal; min-width: 96px; }
+.report th.day { line-height: 1.15; }
 .report th { color: var(--muted); font-weight: 500; }
 .report th.day { cursor: pointer; }
 .report th.day:hover { color: var(--text); text-decoration: underline; }
@@ -168,3 +169,13 @@ h3:first-child { margin-top: 6px; }
 .hint { margin-bottom: 8px; }
 .about { display: flex; align-items: center; gap: 12px; }
 .about-logo { width: 40px; height: 40px; }
+
+.small-btn.danger { color: var(--danger); border-color: transparent; background: transparent; }
+.small-btn.danger:hover { background: #fbeceb; border-color: #f0c9c6; }
+
+/* неделя: названия слева и итог справа закреплены, прокручиваются только дни */
+.report th.name, .report td.name, .report th.sum, .report td.sum { position: sticky; background: var(--bg); z-index: 1; }
+.report th.name, .report td.name { left: 0; }
+.report th.sum, .report td.sum { right: 0; padding-left: 8px; box-shadow: -6px 0 6px -6px rgba(0,0,0,.18); }
+.report tr.total td.sum { font-weight: 700; }
+.report tr.task { background: transparent; box-shadow: none; border-radius: 0; }

@@ -632,27 +632,41 @@ function renderWeek() {
   const table = $('weekTable');
   table.innerHTML = '';
   const names = tr('weekdays');
-  const cell = (ms, cls = '') => el('td', { class: cls + (ms ? '' : ' zero') }, ms ? fmtDur(ms) : '–');
-  table.append(el('tr', {}, el('th', {}, tr('clientTask')),
-    days.map((k, i) => el('th', { class: 'day' + (k === todayKey() ? ' today' : ''), title: tr('openDay'), onclick: () => { viewDay = k; setView('day'); } }, `${names[i]} ${new Date(startOfKey(k)).getDate()}`)),
-    el('th', {}, tr('totalCol'))));
+  const sum = (arr) => arr.reduce((s, v) => s + v, 0);
 
+  // итоги по дням — чтобы понять, какие колонки показывать
   const totals = Array(7).fill(0);
+  for (const cid of Object.keys(rows)) for (const arr of Object.values(rows[cid])) arr.forEach((v, i) => { totals[i] += v; });
+  // выходные без записей прячем — таблица помещается в узкое окно
+  const vis = days.map((k, i) => i).filter((i) => isWorkDay(startOfKey(days[i])) || totals[i] > 0);
+  const pick = (arr) => vis.map((i) => arr[i]);
+
+  const cell = (ms, cls = '') => el('td', { class: cls + (ms ? '' : ' zero') }, ms ? fmtDur(ms) : '–');
+  const nameCell = (...kids) => el('td', { class: 'name' }, ...kids);
+  const sumCell = (ms) => cell(ms, 'sum');
+  table.append(el('tr', {}, el('th', { class: 'name' }, tr('clientTask')),
+    vis.map((i) => {
+      const k = days[i];
+      return el('th', { class: 'day' + (k === todayKey() ? ' today' : ''), title: tr('openDay'), onclick: () => { viewDay = k; setView('day'); } },
+        names[i], el('br'), String(new Date(startOfKey(k)).getDate()));
+    }),
+    el('th', { class: 'sum' }, tr('totalCol'))));
+
   const clientIds = Object.keys(rows).sort((x, y) => (client(x)?.name || '').localeCompare(client(y)?.name || ''));
   for (const cid of clientIds) {
     const c = client(cid);
     const cSum = Array(7).fill(0);
-    for (const arr of Object.values(rows[cid])) arr.forEach((v, i) => { cSum[i] += v; totals[i] += v; });
+    for (const arr of Object.values(rows[cid])) arr.forEach((v, i) => { cSum[i] += v; });
     table.append(el('tr', { class: 'client' },
-      el('td', {}, el('span', { class: 'dot', style: `background:${c?.color};margin-right:6px` }), c ? c.name : '—'),
-      cSum.map((v) => cell(v)), cell(cSum.reduce((s, v) => s + v, 0), 'sum')));
+      nameCell(el('span', { class: 'dot', style: `background:${c?.color};margin-right:6px` }), c ? c.name : '—'),
+      pick(cSum).map((v) => cell(v)), sumCell(sum(cSum))));
     const tIds = Object.keys(rows[cid]).sort((x, y) => (task(x)?.name || '').localeCompare(task(y)?.name || ''));
     for (const tid of tIds) {
       const arr = rows[cid][tid];
-      table.append(el('tr', { class: 'task' }, el('td', {}, task(tid).name), arr.map((v) => cell(v)), cell(arr.reduce((s, v) => s + v, 0), 'sum')));
+      table.append(el('tr', { class: 'task' }, nameCell(task(tid)?.name || '—'), pick(arr).map((v) => cell(v)), sumCell(sum(arr))));
     }
   }
-  table.append(el('tr', { class: 'total' }, el('td', {}, tr('grandTotal')), totals.map((v) => cell(v)), cell(totals.reduce((s, v) => s + v, 0))));
+  table.append(el('tr', { class: 'total' }, nameCell(tr('grandTotal')), pick(totals).map((v) => cell(v)), sumCell(sum(totals))));
   const total = totals.reduce((s, v) => s + v, 0);
   $('weekTotal').textContent = tr('weekTotal', { t: fmtDur(total), h: hoursDec(total) });
   $('weekEmpty').classList.toggle('hidden', clientIds.length > 0);
@@ -724,6 +738,7 @@ function renderClients() {
       el('span', { class: 'cl-meta' }, `${tr(activeTasks.length === 1 ? 'tasks1' : 'tasksN', { n: activeTasks.length })} · ${fmtDur(sum)}`),
       el('button', { class: 'small-btn', onclick: (e) => { e.stopPropagation(); c.archived = !c.archived; save(); render(); } },
         c.archived ? tr('restore') : tr('archive')),
+      el('button', { class: 'small-btn danger', title: tr('delete'), onclick: (e) => { e.stopPropagation(); deleteClient(c.id); } }, tr('delete')),
     );
     const li = el('li', { class: 'cl-item' }, head);
     if (open) {
@@ -739,6 +754,7 @@ function renderClients() {
           tin,
           el('span', { class: 'cl-meta', title: tr('lastUsedTitle') }, `${fmtDur(total[t.id] || 0)} · ${shortDate(last[t.id])}`),
           el('button', { class: 'small-btn', onclick: () => { t.archived = !t.archived; save(); render(); } }, t.archived ? tr('restore') : tr('archive')),
+          el('button', { class: 'small-btn danger', title: tr('delete'), onclick: () => deleteTask(t.id) }, tr('delete')),
         );
       };
       if (!activeTasks.length) body.append(el('div', { class: 'muted small' }, tr('noActiveTasks')));
@@ -800,6 +816,42 @@ function renderWorkDays() {
       save(); renderWorkDays();
     } }, names[i]));
   });
+}
+
+// удаление — необратимо, поэтому с подтверждением и с суммой времени, которое пропадёт
+function trackedMs(taskIds) {
+  const set = new Set(taskIds);
+  return data.entries.filter((e) => set.has(e.taskId)).reduce((s, e) => s + (entryEnd(e) - e.start), 0);
+}
+function removeTasks(taskIds) {
+  const set = new Set(taskIds);
+  const r = running();
+  data.entries = data.entries.filter((e) => !set.has(e.taskId));
+  data.tasks = data.tasks.filter((t) => !set.has(t.id));
+  for (const k of Object.keys(data.days)) data.days[k] = data.days[k].filter((id) => !set.has(id));
+  if (r && set.has(r.taskId)) afterStop();
+  if (set.has(expandedTaskId)) expandedTaskId = null;
+}
+function deleteTask(id) {
+  const t = task(id); if (!t) return;
+  const ms = trackedMs([id]);
+  const msg = ms ? tr('delTaskConfirm', { name: t.name, t: fmtDur(ms) }) : tr('delTaskEmpty', { name: t.name });
+  if (!confirm(msg)) return;
+  removeTasks([id]);
+  save(); render();
+}
+function deleteClient(id) {
+  const c = client(id); if (!c) return;
+  const ids = data.tasks.filter((t) => t.clientId === id).map((t) => t.id);
+  const ms = trackedMs(ids);
+  const msg = ms ? tr('delClientConfirm', { name: c.name, n: ids.length, t: fmtDur(ms) }) : tr('delClientEmpty', { name: c.name });
+  if (!confirm(msg)) return;
+  removeTasks(ids);
+  data.clients = data.clients.filter((x) => x.id !== id);
+  if (selectedClientId === id) selectedClientId = null;
+  if (data.lastClientId === id) data.lastClientId = null;
+  clExpanded.delete(id);
+  save(); render();
 }
 
 function saveNewClientFromList() {
