@@ -13,7 +13,7 @@ fs.mkdirSync('test-output', { recursive: true });
   const app = await _electron.launch({
     executablePath: require('electron'),
     args: [require('path').join(__dirname, '..'), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],
-    env: { ...process.env, XDG_CONFIG_HOME: cfg, APPDATA: cfg },
+    env: { ...process.env, FOCUSLY_USER_DATA: cfg + '/Focusly' },
   });
   app.on('console', (m) => console.log('[main]', m.text()));
   // имитируем активного пользователя: система «видит» ввод 3 секунды назад
@@ -26,7 +26,7 @@ fs.mkdirSync('test-output', { recursive: true });
   for (let i = 0; i < 9; i++) {
     await new Promise((r) => setTimeout(r, 10000));
     const urls = app.windows().map((w) => w.url().split('/').pop());
-    const st = await win.evaluate(() => ({ popupKind, activeSince: activeSince && Math.round((Date.now() - activeSince) / 1000), away: !!away, running: !!running() }));
+    const st = await win.evaluate(() => ({ min: data.settings.notRunningMinutes, popupKind, activeSince: activeSince && Math.round((Date.now() - activeSince) / 1000), away: !!away, running: !!running() }));
     console.log(`${Math.round((Date.now() - t0) / 1000)}s windows=${urls.join(',')} state=${JSON.stringify(st)}`);
     if (urls.includes('popup.html')) {
       const pop = app.windows().find((w) => w.url().endsWith('popup.html'));

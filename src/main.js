@@ -351,6 +351,9 @@ function watchSystem() {
   powerMonitor.on('resume', () => send('sys:resume'));
 }
 
+// для автотестов: отдельная папка данных (в обычной работе не используется)
+if (process.env.FOCUSLY_USER_DATA) app.setPath('userData', process.env.FOCUSLY_USER_DATA);
+
 // британская локаль — поля времени в 24-часовом формате, системные меню на английском
 app.commandLine.appendSwitch('lang', 'en-GB');
 
