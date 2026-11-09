@@ -1,13 +1,13 @@
 # Сборка Windows-установщика и публикация в GitHub Releases.
-# Запускается, когда в main меняется package.json (например, поднята версия),
-# или вручную: Actions → Release → Run workflow.
-# Если релиз с такой версией уже есть — сборка пропускается.
+# Запускается, когда в main меняется package.json (например, поднята версия) или этот файл,
+# либо вручную: Actions → Release → Run workflow.
+# Если в релизе этой версии уже есть установщик — сборка пропускается.
 name: Release
 
 on:
   push:
     branches: [main]
-    paths: ['package.json']
+    paths: ['package.json', '.github/workflows/release.yml']
   workflow_dispatch:
 
 permissions:
@@ -16,19 +16,19 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v5
 
       - name: Check if this version is already released
         id: ver
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if gh release view "v$VERSION" > /dev/null 2>&1; then
-            echo "Release v$VERSION already exists — skipping build."
+          if gh release view "v$VERSION" --json assets -q '.assets[].name' 2>/dev/null | grep -qx "Focusly-Setup-$VERSION.exe"; then
+            echo "v$VERSION is already released — skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "Building v$VERSION"
@@ -45,18 +45,21 @@ jobs:
         if: steps.ver.outputs.skip == 'false'
         run: npm ci
 
-      - name: Create tag
+      - name: Build installer
+        if: steps.ver.outputs.skip == 'false'
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Publish release
         if: steps.ver.outputs.skip == 'false'
         shell: bash
         run: |
-          TAG="v${{ steps.ver.outputs.version }}"
-          if ! git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
-            git tag "$TAG"
-            git push origin "$TAG"
+          V="${{ steps.ver.outputs.version }}"
+          TAG="v$V"
+          FILES="dist/Focusly-Setup-$V.exe dist/Focusly-Setup-$V.exe.blockmap dist/latest.yml"
+          ls -la $FILES
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" $FILES --clobber
+            gh release edit "$TAG" --draft=false --latest
+          else
+            gh release create "$TAG" $FILES --title "Focusly $V" --generate-notes --latest
           fi
-
-      - name: Build and publish
-        if: steps.ver.outputs.skip == 'false'
-        run: npx electron-builder --win nsis --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
