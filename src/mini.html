@@ -38,7 +38,8 @@
   button.stop { background: #c4453c; border-color: #c4453c; color: #fff; }
   button.stop:hover { background: #a93a32; }
   button.ghost { border-color: transparent; border-radius: 6px; width: 24px; color: #8a8a83; font-size: 13px; }
-  button.ghost:hover { color: #1d1d1b; }
+  button.ghost:hover { color: #1d1d1b; background: #f2f2ee; }
+  button svg { display: block; margin: auto; }
 </style>
 </head>
 <body>
@@ -46,7 +47,7 @@
   <div class="task" id="task"></div>
   <span class="time" id="time"></span>
   <button id="toggle"></button>
-  <button class="ghost" id="expand">⤢</button>
+  <button class="ghost" id="expand"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"/></svg></button>
 <script src="i18n.js"></script>
 <script>
   const pad = (n) => String(n).padStart(2, '0');

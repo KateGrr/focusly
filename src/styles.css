@@ -37,8 +37,9 @@ input:focus { border-color: #b9b9b1; }
 .tabs { display: flex; gap: 4px; }
 .tabs button { border: none; background: transparent; color: var(--muted); padding: 6px 10px; }
 .tabs button.active { color: var(--text); background: var(--card); box-shadow: 0 0 0 1px var(--line); }
-.tabs .mini-btn { margin-left: auto; font-size: 12px; }
-.tabs .mini-btn:hover { color: var(--text); background: var(--hover); }
+.tabs button:not(.active):hover { color: var(--text); background: var(--hover); }
+.tabs .mini-btn { margin-left: auto; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }
+.tabs .mini-btn .ico { flex: none; }
 
 /* текущий таймер */
 .running {
@@ -54,7 +55,13 @@ input:focus { border-color: #b9b9b1; }
 .stop-btn:hover { background: #a93a32; }
 
 /* виды */
-.view { flex: 1; overflow-y: auto; padding: 8px 14px 14px; display: flex; flex-direction: column; }
+.view { flex: 1; overflow-y: auto; padding: 8px 6px 14px 14px; display: flex; flex-direction: column; scrollbar-gutter: stable; }
+/* тонкая полоса прокрутки; место под неё зарезервировано всегда (8px + 6px отступа = 14px), поэтому
+   ширина содержимого совпадает с плашкой таймера и шапкой — с прокруткой и без неё */
+.view::-webkit-scrollbar { width: 8px; }
+.view::-webkit-scrollbar-thumb { background: #d3d3cc; border-radius: 4px; }
+.view::-webkit-scrollbar-thumb:hover { background: #b9b9b1; }
+.view::-webkit-scrollbar-track { background: transparent; }
 #view-day { padding-bottom: 0; }
 .datebar { display: flex; align-items: center; gap: 4px; padding: 6px 0 8px; }
 .date-title { flex: 1; text-align: center; font-weight: 600; }

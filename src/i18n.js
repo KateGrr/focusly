@@ -18,7 +18,7 @@
       delClientEmpty: 'Delete client “{name}”?',
       delTaskConfirm: 'Delete task “{name}”?\n\n{t} of tracked time will be removed from every day and report. This cannot be undone.\n\nTip: use “Hide” to keep the history.',
       delTaskEmpty: 'Delete task “{name}”?',
-      tabDay: 'Day', tabWeek: 'Week', mini: '▭ Mini', miniTitle: 'Mini mode: one line on top of all windows (Ctrl+M)', settings: 'Settings',
+      tabDay: 'Day', tabWeek: 'Week', mini: 'Mini', miniTitle: 'Mini mode: one line on top of all windows (Ctrl+M)', settings: 'Settings',
       stop: 'Stop', start: 'Start',
       // день
       today: 'Today', yesterday: 'Yesterday', prevDay: 'Previous day', nextDay: 'Next day',
@@ -93,7 +93,7 @@
       delClientEmpty: 'Удалить клиента «{name}»?',
       delTaskConfirm: 'Удалить задачу «{name}»?\n\n{t} записанного времени пропадёт из всех дней и отчётов. Отменить будет нельзя.\n\nСовет: «Скрыть» убирает задачу из списков, но сохраняет историю.',
       delTaskEmpty: 'Удалить задачу «{name}»?',
-      tabDay: 'День', tabWeek: 'Неделя', mini: '▭ Мини', miniTitle: 'Мини-режим: одна строка поверх всех окон (Ctrl+M)', settings: 'Настройки',
+      tabDay: 'День', tabWeek: 'Неделя', mini: 'Мини', miniTitle: 'Мини-режим: одна строка поверх всех окон (Ctrl+M)', settings: 'Настройки',
       stop: 'Стоп', start: 'Старт',
       today: 'Сегодня', yesterday: 'Вчера', prevDay: 'Предыдущий день', nextDay: 'Следующий день',
       total: 'Итого: {t}', noTasks: 'Задач пока нет — добавь первую ниже',
