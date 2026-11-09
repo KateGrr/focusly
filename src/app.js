@@ -444,7 +444,7 @@ function renderDay() {
 
   const list = $('taskList');
   list.innerHTML = '';
-  const ids = dayList(viewDay);
+  const ids = [...dayList(viewDay)].reverse(); // новые задачи — сверху
   $('taskEmpty').classList.toggle('hidden', ids.length > 0);
   for (const id of ids) {
     const t = task(id);
