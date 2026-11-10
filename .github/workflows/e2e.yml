@@ -1,4 +1,4 @@
-# Проверка напоминаний в настоящем Electron на Windows (и для сравнения на Linux).
+# Проверка напоминаний и автопаузы в настоящем Electron на Windows (и для сравнения на Linux).
 # Запускается при изменении папки test/ или вручную.
 name: E2E reminders
 
@@ -25,10 +25,14 @@ jobs:
       - run: npm install --no-save playwright-core
       - name: Run (Windows)
         if: runner.os == 'Windows'
-        run: node test/e2e-reminder.js
+        run: |
+          node test/e2e-reminder.js
+          node test/e2e-autopause.js
       - name: Run (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run -a node test/e2e-reminder.js
+        run: |
+          xvfb-run -a node test/e2e-reminder.js
+          xvfb-run -a node test/e2e-autopause.js
       - uses: actions/upload-artifact@v4
         if: always()
         with:
