@@ -31,12 +31,32 @@ let popupPayload = null;
 let tray = null;
 let trayState = { running: null, recent: [], lang: 'en' };
 let isQuitting = false;
-let trayHintShown = false;
+let quitReason = null;
 let miniWin = null;
 
-// ---------- состояние интерфейса (мини-режим, позиция) ----------
+// ---------- журнал событий (для диагностики: почему окно спряталось, приложение закрылось и т. п.) ----------
+const LOG_FILE = () => path.join(app.getPath('userData'), 'focusly.log');
+function logEvent(type, details) {
+  try {
+    const line = `${new Date().toISOString()} ${type}${details ? ' ' + (typeof details === 'string' ? details : JSON.stringify(details)) : ''}\n`;
+    const file = LOG_FILE();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(file, line);
+    if (fs.statSync(file).size > 256 * 1024) { // не даём файлу расти бесконечно — оставляем вторую половину
+      const text = fs.readFileSync(file, 'utf8');
+      fs.writeFileSync(file, text.slice(text.length / 2));
+    }
+  } catch {}
+}
+function readLogTail(n = 60) {
+  try { return fs.readFileSync(LOG_FILE(), 'utf8').trim().split('\n').slice(-n); } catch { return []; }
+}
+
+// ---------- состояние интерфейса: мини-режим и положение окна ----------
+// Окно и мини-полоска привязаны к одной точке — левому верхнему углу (ui.anchor):
+// свернула — полоска встаёт туда, где был верх окна; развернула — окно раскрывается вниз от полоски.
 const UI_FILE = () => path.join(app.getPath('userData'), 'ui-state.json');
-let ui = { mini: false, miniX: null, miniY: null, miniW: 340 };
+let ui = { mini: false, miniW: 340, anchor: null, mainSize: null };
 function loadUi() { try { ui = { ...ui, ...JSON.parse(fs.readFileSync(UI_FILE(), 'utf8')) }; } catch {} }
 function saveUi() { try { fs.writeFileSync(UI_FILE(), JSON.stringify(ui)); } catch {} }
 
@@ -52,39 +72,63 @@ function writeData(data) {
   fs.renameSync(tmp, file); // атомарная замена — файл не побьётся при сбое
 }
 
+// ---------- положение окон ----------
+const MINI_H = 40;
+const MAIN_DEFAULT = { width: 460, height: 720 };
+// вписать прямоугольник в рабочую область монитора, на котором находится его угол
+function fitToScreen(b) {
+  const d = screen.getDisplayNearestPoint({ x: Math.round(b.x + 20), y: Math.round(b.y + 10) });
+  const a = d.workArea;
+  const width = Math.min(b.width, a.width), height = Math.min(b.height, a.height);
+  const x = Math.min(Math.max(b.x, a.x), a.x + a.width - width);
+  const y = Math.min(Math.max(b.y, a.y), a.y + a.height - height);
+  return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
+}
+function mainSize() {
+  const s = ui.mainSize || MAIN_DEFAULT;
+  return { width: Math.max(380, s.width || MAIN_DEFAULT.width), height: Math.max(480, s.height || MAIN_DEFAULT.height) };
+}
+// где должно стоять главное окно: от точки привязки вниз; если точки нет — по центру основного монитора
+function mainBoundsFromAnchor() {
+  const size = mainSize();
+  if (ui.anchor) return fitToScreen({ ...ui.anchor, ...size });
+  const a = screen.getPrimaryDisplay().workArea;
+  return fitToScreen({ x: a.x + (a.width - size.width) / 2, y: a.y + (a.height - size.height) / 2, ...size });
+}
+function miniBoundsFromAnchor() {
+  const w = Math.max(240, Math.min(700, ui.miniW || 340));
+  const anchor = ui.anchor || mainBoundsFromAnchor();
+  return fitToScreen({ x: anchor.x, y: anchor.y, width: w, height: MINI_H });
+}
+function rememberMain() {
+  if (!mainWin || mainWin.isMinimized() || mainWin.isMaximized() || !mainWin.isVisible()) return;
+  const b = mainWin.getBounds();
+  ui.anchor = { x: b.x, y: b.y };
+  ui.mainSize = { width: b.width, height: b.height };
+  saveUi();
+}
+
 // ---------- главное окно ----------
-function showMain() {
+function showMain(source) {
   if (!mainWin) return;
+  logEvent('main:show', source);
   if (mainWin.isMinimized()) mainWin.restore();
   mainWin.show();
   mainWin.focus();
 }
 
 // ---------- мини-режим: одна строка поверх всех окон ----------
-const MINI_H = 40;
-// мини-полоска открывается на том мониторе, где было главное окно (или где курсор);
-// место запоминается отдельно для каждого монитора
-function insideWorkArea(p, w, a) {
-  return p.x >= a.x - w + 40 && p.x <= a.x + a.width - 40 && p.y >= a.y && p.y <= a.y + a.height - 20;
-}
-function miniBounds(refBounds) {
-  const w = Math.max(240, Math.min(700, ui.miniW || 340));
-  const disp = refBounds ? screen.getDisplayMatching(refBounds) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const a = disp.workArea;
-  const saved = (ui.miniPos || {})[disp.id];
-  if (saved && insideWorkArea(saved, w, a)) return { x: saved.x, y: saved.y, width: w, height: MINI_H };
-  return { x: Math.round(a.x + (a.width - w) / 2), y: a.y + 8, width: w, height: MINI_H };
-}
-function openMini() {
+function openMini(source) {
+  logEvent('mini:open', source);
+  rememberMain(); // точка привязки — текущий верх окна
   ui.mini = true; saveUi();
-  const ref = mainWin && mainWin.isVisible() ? mainWin.getBounds() : null;
   if (mainWin) mainWin.hide();
-  if (miniWin) { miniWin.setBounds(miniBounds(ref)); miniWin.showInactive(); return; }
+  if (miniWin) { miniWin.setBounds(miniBoundsFromAnchor()); miniWin.showInactive(); updateTray(); return; }
   miniWin = new BrowserWindow({
-    ...miniBounds(ref),
+    ...miniBoundsFromAnchor(),
     minWidth: 240, maxWidth: 700, minHeight: MINI_H, maxHeight: MINI_H,
     frame: false, resizable: true, maximizable: false, fullscreenable: false,
-    alwaysOnTop: true, skipTaskbar: true, show: false,
+    alwaysOnTop: true, skipTaskbar: false, show: false, // иконка на панели задач есть и в мини-режиме
     title: 'Focusly', icon: ICON('icon.png'), backgroundColor: '#ffffff',
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
@@ -92,11 +136,11 @@ function openMini() {
   miniWin.setVisibleOnAllWorkspaces(true);
   miniWin.loadFile(path.join(__dirname, 'mini.html'));
   miniWin.once('ready-to-show', () => { miniWin.webContents.send('mini:state', trayState); miniWin.showInactive(); });
+  // передвинула полоску — двигается и точка привязки (окно потом раскроется отсюда)
   const remember = () => {
-    if (!miniWin) return;
+    if (!miniWin || miniWin.isMinimized()) return;
     const b = miniWin.getBounds();
-    const d = screen.getDisplayMatching(b);
-    ui.miniPos = { ...(ui.miniPos || {}), [d.id]: { x: b.x, y: b.y } };
+    ui.anchor = { x: b.x, y: b.y };
     ui.miniW = b.width;
     saveUi();
   };
@@ -105,18 +149,15 @@ function openMini() {
   miniWin.on('closed', () => { miniWin = null; });
   updateTray();
 }
-function closeMini() {
+function closeMini(source) {
+  logEvent('mini:close', source);
   ui.mini = false; saveUi();
   if (miniWin) {
-    // полное окно открываем на том же мониторе, где была полоска
-    const md = screen.getDisplayMatching(miniWin.getBounds());
-    if (mainWin && screen.getDisplayMatching(mainWin.getBounds()).id !== md.id) {
-      const mb = mainWin.getBounds(), a = md.workArea;
-      mainWin.setBounds({ x: Math.round(a.x + (a.width - mb.width) / 2), y: Math.round(a.y + Math.max(0, (a.height - mb.height) / 2)), width: mb.width, height: Math.min(mb.height, a.height) });
-    }
+    if (!miniWin.isMinimized()) { const b = miniWin.getBounds(); ui.anchor = { x: b.x, y: b.y }; saveUi(); }
     miniWin.close();
   }
-  showMain();
+  if (mainWin) mainWin.setBounds(mainBoundsFromAnchor());
+  showMain('mini-close');
   updateTray();
 }
 function miniMenu() {
@@ -129,34 +170,51 @@ function miniMenu() {
     for (const t of trayState.recent) items.push({ label: `   ${t.label}`, click: () => send('cmd', { type: 'start', taskId: t.id }) });
     items.push({ type: 'separator' });
   }
-  items.push({ label: t('menuNewTask'), click: () => { closeMini(); send('cmd', { type: 'newTask' }); } });
-  items.push({ label: t('menuFull'), click: closeMini });
+  items.push({ label: t('menuNewTask'), click: () => { closeMini('mini-menu:new-task'); send('cmd', { type: 'newTask' }); } });
+  items.push({ label: t('menuFull'), click: () => closeMini('mini-menu:full') });
   Menu.buildFromTemplate(items).popup({ window: miniWin || undefined });
 }
 
-function createMainWindow(hidden) {
+function createMainWindow(startHidden) {
   mainWin = new BrowserWindow({
-    width: 460, height: 720, minWidth: 380, minHeight: 480,
+    ...mainBoundsFromAnchor(), minWidth: 380, minHeight: 480,
     title: 'Focusly',
     icon: ICON('icon.png'),
     backgroundColor: '#f7f7f5',
     autoHideMenuBar: true,
-    show: !hidden,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       backgroundThrottling: false, // таймер и проверки работают и в свёрнутом окне
     },
   });
   mainWin.loadFile(path.join(__dirname, 'index.html'));
-  // крестик — свернуть в трей, приложение продолжает работать
+  mainWin.once('ready-to-show', () => {
+    if (ui.mini) return; // в мини-режиме главное окно спрятано, на панели задач — иконка полоски
+    if (startHidden) { mainWin.showInactive(); mainWin.minimize(); } // автозапуск: сразу свёрнуто, но на панели задач
+    else mainWin.show();
+  });
+  mainWin.on('moved', rememberMain);
+  mainWin.on('resized', rememberMain);
+  // крестик: в Windows/Linux — свернуть на панель задач (так приложение невозможно «потерять»),
+  // в macOS — спрятать, как принято там. Выйти совсем — через меню трея.
   mainWin.on('close', (e) => {
     if (isQuitting) return;
     e.preventDefault();
-    mainWin.hide();
-    if (!trayHintShown && Notification.isSupported()) {
-      trayHintShown = true;
+    rememberMain();
+    if (process.platform === 'darwin') { mainWin.hide(); logEvent('main:hide', 'close-button'); }
+    else { mainWin.minimize(); logEvent('main:minimize', 'close-button'); }
+    if (!ui.closeHintShown && Notification.isSupported()) {
+      ui.closeHintShown = true; saveUi();
       new Notification({ title: T()('bgTitle'), body: T()('bgBody'), silent: true }).show();
     }
+  });
+  mainWin.on('minimize', () => logEvent('main:minimized'));
+  mainWin.on('hide', () => logEvent('main:hidden'));
+  mainWin.on('unresponsive', () => logEvent('main:unresponsive'));
+  mainWin.webContents.on('render-process-gone', (_e, d) => {
+    logEvent('renderer:gone', d);
+    if (!isQuitting && d.reason !== 'clean-exit') mainWin.reload(); // окно упало — перезагружаем, данные на диске
   });
   mainWin.on('closed', () => { mainWin = null; });
 }
@@ -192,9 +250,9 @@ function updateTray() {
     items.push({ label: T()('trayDownloadUpdate', { v: updateStatus.version }), click: () => shell.openExternal(RELEASES_URL) });
     items.push({ type: 'separator' });
   }
-  items.push({ label: T()('trayMini'), type: 'checkbox', checked: !!miniWin, click: () => (miniWin ? closeMini() : openMini()) });
-  items.push({ label: T()('trayOpen'), click: () => (miniWin ? closeMini() : showMain()) });
-  items.push({ label: T()('trayQuit'), click: () => { isQuitting = true; app.quit(); } });
+  items.push({ label: T()('trayMini'), type: 'checkbox', checked: !!miniWin, click: () => (miniWin ? closeMini('tray-menu') : openMini('tray-menu')) });
+  items.push({ label: T()('trayOpen'), click: () => (miniWin ? closeMini('tray-menu:open') : showMain('tray-menu:open')) });
+  items.push({ label: T()('trayQuit'), click: () => { quitReason = 'tray-quit'; isQuitting = true; app.quit(); } });
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
@@ -202,7 +260,7 @@ function createTray() {
   tray = new Tray(nativeImage.createFromPath(ICON('tray-idle.png')).resize({ width: 16, height: 16 }));
   tray.on('click', () => {
     if (miniWin) { miniWin.showInactive(); return; }
-    if (mainWin && mainWin.isVisible() && mainWin.isFocused()) mainWin.hide(); else showMain();
+    if (mainWin && mainWin.isVisible() && !mainWin.isMinimized() && mainWin.isFocused()) { logEvent('main:minimize', 'tray-click'); mainWin.minimize(); } else showMain('tray-click');
   });
   updateTray();
 }
@@ -212,6 +270,7 @@ const POPUP_H = { reminder: 176, idle: 250, notRunning: 150, endOfDay: 170 };
 
 let popupAnswered = false;
 function showPopup(payload) {
+  logEvent('popup:show', payload.kind);
   popupPayload = payload;
   popupAnswered = false;
   const w = 380, h = POPUP_H[payload.kind] || 200;
@@ -271,7 +330,7 @@ ipcMain.handle('popup:answer', (_e, answer) => {
   popupAnswered = true;
   closePopup();
   send('popup:answer', answer);
-  if (['switch', 'choose', 'open'].includes(answer.action)) showMain();
+  if (['switch', 'choose', 'open'].includes(answer.action)) showMain('popup:' + answer.action);
   return true;
 });
 
@@ -284,6 +343,8 @@ ipcMain.handle('diag:main', () => ({
   popup: popupWin ? { visible: popupWin.isVisible(), bounds: popupWin.getBounds(), onTop: popupWin.isAlwaysOnTop(), kind: popupPayload && popupPayload.kind } : null,
   mini: miniWin ? { visible: miniWin.isVisible(), bounds: miniWin.getBounds() } : null,
   update: updateStatus,
+  windows: { main: mainWin ? { visible: mainWin.isVisible(), minimized: mainWin.isMinimized(), bounds: mainWin.getBounds() } : null, anchor: ui.anchor, uiMini: ui.mini },
+  log: readLogTail(60),
 }));
 
 ipcMain.handle('tray:update', (_e, state) => {
@@ -292,10 +353,11 @@ ipcMain.handle('tray:update', (_e, state) => {
   if (miniWin) miniWin.webContents.send('mini:state', state);
   return true;
 });
-ipcMain.handle('mini:set', (_e, on) => { on ? openMini() : closeMini(); return true; });
+ipcMain.handle('mini:set', (_e, on, source) => { on ? openMini(source || 'renderer') : closeMini(source || 'renderer'); return true; });
 ipcMain.handle('mini:menu', () => { miniMenu(); return true; });
 ipcMain.handle('mini:cmd', (_e, cmd) => { send('cmd', cmd); return true; });
-ipcMain.handle('window:show', () => { showMain(); return true; });
+ipcMain.handle('window:show', () => { showMain('renderer'); return true; });
+ipcMain.handle('log', (_e, type, details) => { logEvent(type, details); return true; });
 
 // ---------- автообновление (GitHub Releases) ----------
 let updater = null;
@@ -350,6 +412,7 @@ ipcMain.handle('update:open', () => { shell.openExternal(RELEASES_URL); return t
 
 function installUpdate() {
   if (!updater || updateStatus.state !== 'downloaded') return;
+  quitReason = 'update-install';
   isQuitting = true;
   updater.quitAndInstall();
 }
@@ -380,10 +443,10 @@ ipcMain.handle('export:csv', async (_e, { defaultName, content }) => {
 function watchSystem() {
   // раз в 5 секунд сообщаем, сколько секунд не было ввода с мыши/клавиатуры во всей системе
   setInterval(() => send('sys:idle', powerMonitor.getSystemIdleTime()), 5000);
-  powerMonitor.on('lock-screen', () => send('sys:lock'));
-  powerMonitor.on('unlock-screen', () => send('sys:unlock'));
-  powerMonitor.on('suspend', () => send('sys:suspend'));
-  powerMonitor.on('resume', () => send('sys:resume'));
+  powerMonitor.on('lock-screen', () => { logEvent('sys:lock'); send('sys:lock'); });
+  powerMonitor.on('unlock-screen', () => { logEvent('sys:unlock'); send('sys:unlock'); });
+  powerMonitor.on('suspend', () => { logEvent('sys:suspend'); send('sys:suspend'); });
+  powerMonitor.on('resume', () => { logEvent('sys:resume'); send('sys:resume'); });
 }
 
 // для автотестов: отдельная папка данных (в обычной работе не используется)
@@ -394,9 +457,10 @@ app.commandLine.appendSwitch('lang', 'en-GB');
 
 // ---------- запуск ----------
 if (!app.requestSingleInstanceLock()) {
+  // второй экземпляр: просто будим первый и выходим
   app.quit();
 } else {
-  app.on('second-instance', showMain);
+  app.on('second-instance', () => { logEvent('second-instance'); if (miniWin) miniWin.showInactive(); else showMain('second-instance'); });
   app.whenReady().then(() => {
     // Windows показывает уведомления только «зарегистрированным» приложениям.
     // В собранном .exe это делает установщик; при запуске через npm start используем путь к electron.exe.
@@ -404,13 +468,18 @@ if (!app.requestSingleInstanceLock()) {
     migrateFromTimeTracker();
     loadUi();
     const startHidden = process.argv.includes('--hidden') || (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAsHidden);
-    createMainWindow(startHidden || ui.mini);
-    if (ui.mini) mainWin.webContents.once('did-finish-load', openMini);
+    logEvent('app:start', { version: app.getVersion(), startHidden, mini: ui.mini, platform: process.platform });
+    createMainWindow(startHidden);
+    if (ui.mini) mainWin.webContents.once('did-finish-load', () => openMini('startup'));
     createTray();
     watchSystem();
     setupAutoUpdate();
-    app.on('activate', showMain);
+    app.on('activate', () => showMain('activate'));
   });
-  app.on('before-quit', () => { isQuitting = true; });
+  app.on('before-quit', () => { isQuitting = true; logEvent('app:quit', quitReason || 'system'); });
+  // падения дочерних процессов (GPU, сеть) и необработанные ошибки — тоже в журнал
+  app.on('child-process-gone', (_e, d) => logEvent('child:gone', d));
+  process.on('uncaughtException', (e) => logEvent('main:error', String((e && e.stack) || e)));
+  process.on('unhandledRejection', (e) => logEvent('main:rejection', String((e && e.stack) || e)));
   app.on('window-all-closed', () => { /* живём в трее */ });
 }

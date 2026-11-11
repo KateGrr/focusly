@@ -22,7 +22,8 @@ contextBridge.exposeInMainWorld('api', {
   onCommand: on('cmd'),
 
   // мини-режим
-  setMini: (onOff) => ipcRenderer.invoke('mini:set', onOff),
+  setMini: (onOff, source) => ipcRenderer.invoke('mini:set', onOff, source),
+  log: (type, details) => ipcRenderer.invoke('log', type, details),
   miniMenu: () => ipcRenderer.invoke('mini:menu'),
   miniCmd: (cmd) => ipcRenderer.invoke('mini:cmd', cmd),
   onMiniState: on('mini:state'),

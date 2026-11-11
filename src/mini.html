@@ -94,8 +94,8 @@
     else if (st.recent[0]) window.api.miniCmd({ type: 'start', taskId: st.recent[0].id });
     else window.api.miniMenu();
   });
-  document.getElementById('expand').addEventListener('click', () => window.api.setMini(false));
-  document.body.addEventListener('dblclick', (e) => { if (e.target === document.body) window.api.setMini(false); });
+  document.getElementById('expand').addEventListener('click', () => window.api.setMini(false, 'mini-expand'));
+  document.body.addEventListener('dblclick', (e) => { if (e.target === document.body) window.api.setMini(false, 'mini-dblclick'); });
   setInterval(tick, 1000);
 </script>
 </body>

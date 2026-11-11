@@ -365,6 +365,7 @@ let lastErrors = [];
 function safe(name, fn) {
   try { fn(); } catch (e) {
     lastErrors = [`${new Date().toLocaleTimeString()} ${name}: ${e && e.message}`, ...lastErrors].slice(0, 5);
+    try { window.api.log('renderer:error', `${name}: ${e && e.stack}`); } catch {}
     console.error(name, e);
   }
 }
@@ -984,8 +985,8 @@ async function renderSettings() {
 // ---------- события ----------
 function bind() {
   document.querySelectorAll('.tabs button[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
-  $('miniBtn').addEventListener('click', () => window.api.setMini(true));
-  $('runningStop').addEventListener('click', () => { stopRunning(); save(); render(); });
+  $('miniBtn').addEventListener('click', () => window.api.setMini(true, 'mini-button'));
+  $('runningStop').addEventListener('click', () => { window.api.log('timer:stop', 'running-card'); stopRunning(); save(); render(); });
   $('runningTask').parentElement.addEventListener('click', () => { const r = running(); if (r) { viewDay = keyOf(r.start); setView('day'); } });
 
   $('dayPrev').addEventListener('click', () => { viewDay = addDays(viewDay, -1); expandedTaskId = null; render(); });
@@ -1058,7 +1059,7 @@ function bind() {
   // горячие клавиши: Ctrl+N — новая задача, Ctrl+M — мини-режим, Ctrl+. — стоп
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); viewDay = todayKey(); setView('day'); $('taskInput').focus(); }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') { e.preventDefault(); window.api.setMini(true); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') { e.preventDefault(); window.api.setMini(true, 'ctrl+m'); }
     if ((e.ctrlKey || e.metaKey) && e.key === '.') { e.preventDefault(); stopRunning(); save(); render(); }
   });
 

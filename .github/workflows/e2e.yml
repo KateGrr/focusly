@@ -28,11 +28,13 @@ jobs:
         run: |
           node test/e2e-reminder.js
           node test/e2e-autopause.js
+          node test/e2e-windows.js
       - name: Run (Linux)
         if: runner.os == 'Linux'
         run: |
           xvfb-run -a node test/e2e-reminder.js
           xvfb-run -a node test/e2e-autopause.js
+          xvfb-run -a node test/e2e-windows.js
       - uses: actions/upload-artifact@v4
         if: always()
         with:

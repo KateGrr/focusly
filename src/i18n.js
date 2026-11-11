@@ -75,7 +75,7 @@
       trayIdle: 'Focusly — timer not running', trayNotRunning: 'Timer not running', trayStart: 'Start:',
       trayMini: 'Mini mode (on top)', trayOpen: 'Open window', trayQuit: 'Quit',
       menuSwitchTo: 'Switch to:', menuNewTask: 'New task…', menuFull: 'Open full window',
-      bgTitle: 'Focusly keeps running', bgBody: 'Its icon is next to the clock on the taskbar. Right-click it to quit.',
+      bgTitle: 'Focusly keeps running', bgBody: 'The window is minimized to the taskbar. To quit, right-click the Focusly icon next to the clock → Quit.',
       saveCsv: 'CSV',
     },
     ru: {
@@ -144,7 +144,7 @@
       trayIdle: 'Focusly — таймер не запущен', trayNotRunning: 'Таймер не запущен', trayStart: 'Запустить:',
       trayMini: 'Мини-режим (поверх окон)', trayOpen: 'Открыть окно', trayQuit: 'Выход',
       menuSwitchTo: 'Переключиться на:', menuNewTask: 'Новая задача…', menuFull: 'Открыть полное окно',
-      bgTitle: 'Focusly работает в фоне', bgBody: 'Иконка — у часов на панели задач. Выход — правый клик по ней.',
+      bgTitle: 'Focusly продолжает работать', bgBody: 'Окно свёрнуто на панель задач. Чтобы выйти совсем — правый клик по иконке Focusly у часов → Quit.',
       saveCsv: 'CSV',
     },
   };
