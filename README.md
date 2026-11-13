@@ -31,10 +31,12 @@
   When you're back it asks what to do with that time: discard it, keep it, or log it to another task.
 - **Reminders** — "Still on it?" every 30 minutes, "Timer is not running" when you work without tracking,
   and an end-of-workday summary. Work days are configurable — no nagging on weekends.
-- **Mini mode** — a single always-on-top line with `Client: Task`, the timer and stop/start. Works with multiple monitors.
+- **Mini mode** — a single always-on-top line with `Client: Task`, the timer and stop/start. It takes the place of the window's top edge,
+  and the window expands back from wherever you moved the bar. Works with multiple monitors.
 - **Weekly report** — client → task → day table; copy to Google Sheets / Excel or export a detailed CSV.
 - **Hide or delete** — hide clients and tasks you're done with (history and reports stay), or delete ones added by mistake (with confirmation).
-- **Tray & autostart** — keeps running next to the clock; optional start on login.
+- **Always at hand** — the close button minimizes Focusly to the taskbar (it has a taskbar icon in mini mode too);
+  the tray icon next to the clock has quick start/stop. Optional start on login (starts minimized).
 - **English / Русский** interface.
 - **Private by design** — all data stays on your computer in a single JSON file. No accounts, no cloud.
 - **Quiet auto-updates** — new versions download in the background; a green dot on ⚙ means one is ready. No pop-ups.
@@ -55,7 +57,8 @@ All downloads are on the [latest release](https://github.com/KateGrr/focusly/rel
    Click **More info → Run anyway**. You only need to do this once.
 3. Focusly appears in the Start menu and in the tray next to the clock.
 
-Updates install automatically: when a new version is ready, Focusly offers to restart.
+Updates download in the background. When one is ready, a green dot appears on ⚙ — click **Restart and update** in ⚙ → About,
+or just keep working: it installs the next time you quit.
 
 ### macOS
 1. Download the right file: **`…-mac-arm64.dmg`** for Apple Silicon (M1/M2/M3/M4) or **`…-mac-x64.dmg`** for Intel Macs
@@ -90,10 +93,11 @@ Updates install automatically.
 
 - Click a task in the day view to edit its time intervals; drag ⠿ to move an interval to another task.
 - Week view hides empty weekend days; the Total column always stays visible.
-- Something not working? ⚙ → About → *Copy diagnostics* and send it along with your question.
-- Closing the window keeps Focusly running in the tray. Quit from the tray menu.
+- Something not working? ⚙ → About → *Copy diagnostics* and send it along with your question. It includes the recent
+  event log (when and why the window was minimized, hidden or closed, lock/sleep, errors) — no client or task names.
+- The close button minimizes Focusly to the taskbar. To quit completely: right-click the tray icon → **Quit**.
 - Your data is a single JSON file (Settings → *Open data folder*): `%APPDATA%\Focusly` on Windows,
-  `~/Library/Application Support/Focusly` on macOS, `~/.config/Focusly` on Linux.
+  `~/Library/Application Support/Focusly` on macOS, `~/.config/Focusly` on Linux. The event log `focusly.log` is next to it.
 
 ## Development
 
@@ -111,14 +115,30 @@ npm run dist:linux # Linux AppImage
 GitHub Actions builds Windows, macOS and Linux versions, creates the `vX.Y.Z` release and uploads them;
 installed apps pick up the update automatically. You can also run it manually: *Actions → Release → Run workflow*.
 
+**Tests.** End-to-end tests launch the real app with an isolated data folder and check the key behaviours:
+the "timer is not running" reminder, auto-pause (idle, screen lock, sleep) and window positions / mini mode.
+They run automatically on Windows and Linux on every change to `test/` (*Actions → E2E reminders*). To run locally:
+
+```bash
+npm install --no-save playwright-core
+node test/e2e-reminder.js     # on Linux without a display: xvfb-run -a node test/...
+node test/e2e-autopause.js
+node test/e2e-windows.js
+```
+
 Project layout:
 
 ```
-src/main.js      main process: windows, tray, idle detection, notifications, auto-update
+src/main.js      main process: windows, tray, idle detection, notifications, auto-update, event log
+src/preload.js   bridge between the windows and the main process
 src/app.js       main window UI and tracking logic
+src/index.html   main window
+src/styles.css   main window styles
 src/popup.html   reminder / away / end-of-day pop-ups
 src/mini.html    mini mode
 src/i18n.js      English and Russian texts
+test/            end-to-end tests (Playwright + Electron)
+.github/         release and test workflows
 ```
 
 ## License
@@ -134,8 +154,8 @@ src/i18n.js      English and Russian texts
 **Что умеет:** клиенты и задачи с запуском в один клик и мгновенным переключением; каждый день начинается с нуля,
 прошлые дни можно открыть и поправить; ручная правка интервалов и перенос времени на другую задачу перетаскиванием; новые задачи появляются сверху; автопауза при бездействии, блокировке экрана и сне
 с вопросом при возвращении («убрать время», «оставить» или «записать на другую задачу»); напоминания «продолжаем?»,
-«таймер не запущен» и «конец рабочего дня» с учётом рабочих дней; мини-режим поверх всех окон; недельный отчёт
-с копированием в Google Sheets / Excel и экспортом CSV; скрытие завершённых клиентов и задач или удаление ошибочных (с подтверждением); трей и автозапуск;
+«таймер не запущен» и «конец рабочего дня» с учётом рабочих дней; мини-режим поверх всех окон (полоска встаёт на место верха окна, окно раскрывается от неё); недельный отчёт
+с копированием в Google Sheets / Excel и экспортом CSV; скрытие завершённых клиентов и задач или удаление ошибочных (с подтверждением); иконка всегда на панели задач, быстрый старт/стоп из трея, автозапуск;
 интерфейс на английском и русском; тихое автообновление (зелёная точка на ⚙, без всплывающих окон). Все данные хранятся только у тебя на компьютере.
 
 **Установка на Windows:**
@@ -144,7 +164,10 @@ src/i18n.js      English and Russian texts
    нет платной цифровой подписи. Нажми **«Подробнее» → «Выполнить в любом случае»**. Это нужно только один раз.
 3. Focusly появится в «Пуске» и в трее у часов. Язык переключается в ⚙ → Language.
 
-Обновления ставятся сами: когда выйдет новая версия, Focusly предложит перезапуститься.
+Обновления скачиваются в фоне. Когда новая версия готова, на ⚙ появляется зелёная точка — нажми **Restart and update**
+в ⚙ → About или просто продолжай работать: обновление установится при следующем выходе.
+
+Крестик сворачивает Focusly на панель задач. Чтобы выйти совсем — правый клик по иконке у часов → **Quit**.
 
 **macOS:** скачай `…-mac-arm64.dmg` (Apple M1–M4) или `…-mac-x64.dmg` (Intel), перетащи Focusly в «Программы».
 При первом запуске macOS скажет, что не может проверить приложение: **Системные настройки → Конфиденциальность и безопасность →
