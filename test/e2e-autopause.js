@@ -48,13 +48,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('after discard', JSON.stringify(entries));
   results.discardOk = entries.length === 2 && entries[0].min <= 16 && entries[1].open;
 
-  // --- 2. блокировка экрана ---
+  // --- 2a. короткая блокировка (2 мин < порога 10 мин) — не спрашиваем, время считается рабочим ---
+  await app.evaluate(({ powerMonitor }) => powerMonitor.emit('lock-screen'));
+  await sleep(1500);
+  await win.evaluate(() => { const r = running(); if (r && r.idleStart) r.idleStart -= 120e3; if (away) away.start -= 120e3; });
+  await app.evaluate(({ powerMonitor }) => powerMonitor.emit('unlock-screen'));
+  await sleep(2500);
+  const shortState = await state();
+  console.log('short lock', JSON.stringify(shortState));
+  results.shortLockSilent = shortState.popupKind === null && shortState.away === false && !(await popupText());
+
+  // --- 2b. блокировка экрана дольше порога ---
   await app.evaluate(({ powerMonitor }) => powerMonitor.emit('lock-screen'));
   await sleep(7000); // проверка бездействия видит ввод 2 сек назад — пауза при этом НЕ должна сниматься
   console.log('locked +7s', JSON.stringify(await state()));
   results.lockHolds = (await state()).away === true;
-  // имитируем, что прошло 2 минуты: сдвигаем начало отсутствия
-  await win.evaluate(() => { const r = running(); if (r && r.idleStart) r.idleStart -= 120e3; if (away) away.start -= 120e3; });
+  // имитируем, что прошло 12 минут: сдвигаем начало отсутствия
+  await win.evaluate(() => { const r = running(); if (r && r.idleStart) r.idleStart -= 12 * 60e3; if (away) away.start -= 12 * 60e3; });
   await app.evaluate(({ powerMonitor }) => powerMonitor.emit('unlock-screen'));
   await sleep(2500);
   console.log('unlocked', JSON.stringify(await state()));
@@ -79,7 +89,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const diag = await win.evaluate(() => diagnostics());
   fs.writeFileSync('test-output/diagnostics-autopause.json', diag);
   await app.close();
-  const ok = results.idlePopup && results.idlePopup.includes('You were away') && results.discardOk && results.lockHolds && results.lockPopup && results.lockPopup.includes('You were away') && results.sleepHolds && results.sleepPopup && results.sleepPopup.includes('You were away');
+  const ok = results.idlePopup && results.idlePopup.includes('You were away') && results.discardOk && results.shortLockSilent && results.lockHolds && results.lockPopup && results.lockPopup.includes('You were away') && results.sleepHolds && results.sleepPopup && results.sleepPopup.includes('You were away');
   console.log(ok ? 'AUTOPAUSE OK' : 'AUTOPAUSE FAILED', JSON.stringify(results));
   if (!ok) process.exit(1);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

@@ -281,7 +281,9 @@ function endAway(end) {
   activeSince = end;
   const r = running();
   if (!r || !r.idleStart) return;
-  if (end - r.idleStart < 60000) { delete r.idleStart; save(); return; } // отошли на минуту — не спрашиваем
+  // короткая отлучка (меньше порога из настроек — по умолчанию 10 мин) считается рабочим временем, не спрашиваем.
+  // Для бездействия порог и так уже пройден; это важно для блокировки экрана и сна.
+  if (end - r.idleStart < Math.max(1, data.settings.idleMinutes) * 60000) { delete r.idleStart; save(); return; }
   r.awayEnd = end;
   save();
   showIdlePopup();
@@ -381,7 +383,7 @@ function pushTray() {
   const r = running();
   const t = r && task(r.taskId), c = t && client(t.clientId);
   const state = {
-    running: r ? { taskName: t ? t.name : '—', clientName: c ? c.name : '—', color: c ? c.color : '', away: !!r.idleStart,
+    running: r ? { entryId: r.id, taskName: t ? t.name : '—', clientName: c ? c.name : '—', color: c ? c.color : '', away: !!r.idleStart,
                    todayMs: taskDayTotal(r.taskId, todayKey()) } : null,
     recent: recentTasks(6, r && r.taskId).map((x) => ({ id: x.id, label: taskLabel(x) })),
   };
@@ -1069,7 +1071,7 @@ function bind() {
   window.api.onIdle(onIdleSeconds);
   window.api.onLock(() => { if (data.settings.lockPause) beginAway(Date.now(), 'lock'); });
   window.api.onUnlock(() => endAway(Date.now()));
-  window.api.onSuspend(() => beginAway(Date.now(), 'sleep'));
+  window.api.onSuspend(() => { if (data.settings.lockPause) beginAway(Date.now(), 'sleep'); });
   // после сна ждём реального движения мыши/клавиатуры — его поймает onIdleSeconds
   window.api.onResume(() => { if (away && away.reason === 'sleep') away.resumed = true; });
 }

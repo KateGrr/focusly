@@ -53,10 +53,12 @@ function readLogTail(n = 60) {
 }
 
 // ---------- состояние интерфейса: мини-режим и положение окна ----------
-// Окно и мини-полоска привязаны к одной точке — левому верхнему углу (ui.anchor):
-// свернула — полоска встаёт туда, где был верх окна; развернула — окно раскрывается вниз от полоски.
+// Полоска и окно раскрываются друг из друга по правилу «половины экрана»:
+//   в нижней половине экрана окно раскрывается ВВЕРХ от полоски, а сворачивается на свой НИЖНИЙ край;
+//   в верхней половине — раскрывается ВНИЗ и сворачивается на ВЕРХНИЙ край.
+// Направление каждый раз считается заново по тому, где окно сейчас, — без запоминания, поэтому не путается.
 const UI_FILE = () => path.join(app.getPath('userData'), 'ui-state.json');
-let ui = { mini: false, miniW: 340, anchor: null, mainSize: null };
+let ui = { mini: false, miniW: 340, mainBounds: null, miniPos: null };
 function loadUi() { try { ui = { ...ui, ...JSON.parse(fs.readFileSync(UI_FILE(), 'utf8')) }; } catch {} }
 function saveUi() { try { fs.writeFileSync(UI_FILE(), JSON.stringify(ui)); } catch {} }
 
@@ -75,36 +77,54 @@ function writeData(data) {
 // ---------- положение окон ----------
 const MINI_H = 40;
 const MAIN_DEFAULT = { width: 460, height: 720 };
-// вписать прямоугольник в рабочую область монитора, на котором находится его угол
+const workAreaAt = (x, y) => screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea;
+// вписать прямоугольник в рабочую область монитора, на котором он находится
 function fitToScreen(b) {
-  const d = screen.getDisplayNearestPoint({ x: Math.round(b.x + 20), y: Math.round(b.y + 10) });
-  const a = d.workArea;
+  const a = workAreaAt(b.x + Math.min(b.width, 40) / 2, b.y + Math.min(b.height, 40) / 2);
   const width = Math.min(b.width, a.width), height = Math.min(b.height, a.height);
   const x = Math.min(Math.max(b.x, a.x), a.x + a.width - width);
   const y = Math.min(Math.max(b.y, a.y), a.y + a.height - height);
   return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
 }
+// находится ли прямоугольник в нижней половине своего монитора (по центру)
+function inLowerHalf(b) {
+  const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+  const a = workAreaAt(cx, cy);
+  return cy > a.y + a.height / 2;
+}
 function mainSize() {
-  const s = ui.mainSize || MAIN_DEFAULT;
+  const s = ui.mainBounds || MAIN_DEFAULT;
   return { width: Math.max(380, s.width || MAIN_DEFAULT.width), height: Math.max(480, s.height || MAIN_DEFAULT.height) };
 }
-// где должно стоять главное окно: от точки привязки вниз; если точки нет — по центру основного монитора
-function mainBoundsFromAnchor() {
+function miniWidth() { return Math.max(240, Math.min(700, ui.miniW || 340)); }
+// главное окно при первом запуске / по сохранённому месту
+function savedMainBounds() {
+  if (ui.mainBounds && ui.mainBounds.x != null) return fitToScreen(ui.mainBounds);
   const size = mainSize();
-  if (ui.anchor) return fitToScreen({ ...ui.anchor, ...size });
   const a = screen.getPrimaryDisplay().workArea;
   return fitToScreen({ x: a.x + (a.width - size.width) / 2, y: a.y + (a.height - size.height) / 2, ...size });
 }
-function miniBoundsFromAnchor() {
-  const w = Math.max(240, Math.min(700, ui.miniW || 340));
-  const anchor = ui.anchor || mainBoundsFromAnchor();
-  return fitToScreen({ x: anchor.x, y: anchor.y, width: w, height: MINI_H });
+// развернуть: окно из полоски
+function mainFromMini(mb) {
+  const size = mainSize();
+  const y = inLowerHalf(mb) ? mb.y + MINI_H - size.height : mb.y; // внизу — растём вверх, вверху — вниз
+  return fitToScreen({ x: mb.x, y, ...size });
+}
+// свернуть: полоска из окна
+function miniFromMain(b) {
+  const y = inLowerHalf(b) ? b.y + b.height - MINI_H : b.y; // внизу — на нижний край, вверху — на верхний
+  return fitToScreen({ x: b.x, y, width: miniWidth(), height: MINI_H });
 }
 function rememberMain() {
   if (!mainWin || mainWin.isMinimized() || mainWin.isMaximized() || !mainWin.isVisible()) return;
-  const b = mainWin.getBounds();
-  ui.anchor = { x: b.x, y: b.y };
-  ui.mainSize = { width: b.width, height: b.height };
+  ui.mainBounds = mainWin.getBounds();
+  saveUi();
+}
+function rememberMini() {
+  if (!miniWin || miniWin.isMinimized()) return;
+  const b = miniWin.getBounds();
+  ui.miniPos = { x: b.x, y: b.y };
+  ui.miniW = b.width;
   saveUi();
 }
 
@@ -118,14 +138,20 @@ function showMain(source) {
 }
 
 // ---------- мини-режим: одна строка поверх всех окон ----------
+// returnToMini: окно раскрыли из напоминания («Choose task», «Switch») — после запуска задачи свернём обратно
+let returnToMini = false;
 function openMini(source) {
   logEvent('mini:open', source);
-  rememberMain(); // точка привязки — текущий верх окна
-  ui.mini = true; saveUi();
+  returnToMini = false;
+  let bounds;
+  if (mainWin && mainWin.isVisible() && !mainWin.isMinimized()) { rememberMain(); bounds = miniFromMain(mainWin.getBounds()); }
+  else if (ui.miniPos) bounds = fitToScreen({ ...ui.miniPos, width: miniWidth(), height: MINI_H });
+  else bounds = miniFromMain(savedMainBounds());
+  ui.mini = true; ui.miniPos = { x: bounds.x, y: bounds.y }; saveUi();
   if (mainWin) mainWin.hide();
-  if (miniWin) { miniWin.setBounds(miniBoundsFromAnchor()); miniWin.showInactive(); updateTray(); return; }
+  if (miniWin) { miniWin.setBounds(bounds); miniWin.showInactive(); updateTray(); return; }
   miniWin = new BrowserWindow({
-    ...miniBoundsFromAnchor(),
+    ...bounds,
     minWidth: 240, maxWidth: 700, minHeight: MINI_H, maxHeight: MINI_H,
     frame: false, resizable: true, maximizable: false, fullscreenable: false,
     alwaysOnTop: true, skipTaskbar: false, show: false, // иконка на панели задач есть и в мини-режиме
@@ -136,28 +162,25 @@ function openMini(source) {
   miniWin.setVisibleOnAllWorkspaces(true);
   miniWin.loadFile(path.join(__dirname, 'mini.html'));
   miniWin.once('ready-to-show', () => { miniWin.webContents.send('mini:state', trayState); miniWin.showInactive(); });
-  // передвинула полоску — двигается и точка привязки (окно потом раскроется отсюда)
-  const remember = () => {
-    if (!miniWin || miniWin.isMinimized()) return;
-    const b = miniWin.getBounds();
-    ui.anchor = { x: b.x, y: b.y };
-    ui.miniW = b.width;
-    saveUi();
-  };
-  miniWin.on('moved', remember);
-  miniWin.on('resized', remember);
+  miniWin.on('moved', rememberMini);
+  miniWin.on('resized', rememberMini);
   miniWin.on('closed', () => { miniWin = null; });
   updateTray();
 }
-function closeMini(source) {
-  logEvent('mini:close', source);
-  ui.mini = false; saveUi();
+// развернуть из полоски; temporary = раскрыли на время (из напоминания) — вернёмся в мини после запуска задачи
+function closeMini(source, temporary = false) {
+  logEvent('mini:close', source + (temporary ? ' (temporary)' : ''));
+  ui.mini = false;
+  let mb = null;
   if (miniWin) {
-    if (!miniWin.isMinimized()) { const b = miniWin.getBounds(); ui.anchor = { x: b.x, y: b.y }; saveUi(); }
+    if (!miniWin.isMinimized()) { rememberMini(); mb = miniWin.getBounds(); }
     miniWin.close();
   }
-  if (mainWin) mainWin.setBounds(mainBoundsFromAnchor());
+  if (!mb && ui.miniPos) mb = { ...ui.miniPos, width: miniWidth(), height: MINI_H };
+  saveUi();
+  if (mainWin) mainWin.setBounds(mb ? mainFromMini(mb) : savedMainBounds());
   showMain('mini-close');
+  returnToMini = temporary;
   updateTray();
 }
 function miniMenu() {
@@ -177,7 +200,7 @@ function miniMenu() {
 
 function createMainWindow(startHidden) {
   mainWin = new BrowserWindow({
-    ...mainBoundsFromAnchor(), minWidth: 380, minHeight: 480,
+    ...savedMainBounds(), minWidth: 380, minHeight: 480,
     title: 'Focusly',
     icon: ICON('icon.png'),
     backgroundColor: '#f7f7f5',
@@ -202,6 +225,7 @@ function createMainWindow(startHidden) {
     if (isQuitting) return;
     e.preventDefault();
     rememberMain();
+    returnToMini = false;
     if (process.platform === 'darwin') { mainWin.hide(); logEvent('main:hide', 'close-button'); }
     else { mainWin.minimize(); logEvent('main:minimize', 'close-button'); }
     if (!ui.closeHintShown && Notification.isSupported()) {
@@ -330,7 +354,12 @@ ipcMain.handle('popup:answer', (_e, answer) => {
   popupAnswered = true;
   closePopup();
   send('popup:answer', answer);
-  if (['switch', 'choose', 'open'].includes(answer.action)) showMain('popup:' + answer.action);
+  if (['switch', 'choose', 'open'].includes(answer.action)) {
+    // из мини-режима: раскрываем окно на месте полоски (без дубля); для «Choose task»/«Switch» — на время,
+    // после запуска задачи окно само свернётся обратно в полоску
+    if (miniWin) closeMini('popup:' + answer.action, answer.action !== 'open');
+    else showMain('popup:' + answer.action);
+  }
   return true;
 });
 
@@ -343,11 +372,15 @@ ipcMain.handle('diag:main', () => ({
   popup: popupWin ? { visible: popupWin.isVisible(), bounds: popupWin.getBounds(), onTop: popupWin.isAlwaysOnTop(), kind: popupPayload && popupPayload.kind } : null,
   mini: miniWin ? { visible: miniWin.isVisible(), bounds: miniWin.getBounds() } : null,
   update: updateStatus,
-  windows: { main: mainWin ? { visible: mainWin.isVisible(), minimized: mainWin.isMinimized(), bounds: mainWin.getBounds() } : null, anchor: ui.anchor, uiMini: ui.mini },
+  windows: { main: mainWin ? { visible: mainWin.isVisible(), minimized: mainWin.isMinimized(), bounds: mainWin.getBounds() } : null, mainBounds: ui.mainBounds, miniPos: ui.miniPos, uiMini: ui.mini, returnToMini },
   log: readLogTail(60),
 }));
 
+let lastRunningEntry = null;
 ipcMain.handle('tray:update', (_e, state) => {
+  const runId = state.running && state.running.entryId;
+  if (returnToMini && runId && runId !== lastRunningEntry) setTimeout(() => openMini('auto-return-after-start'), 400);
+  lastRunningEntry = runId || null;
   trayState = state;
   updateTray();
   if (miniWin) miniWin.webContents.send('mini:state', state);
