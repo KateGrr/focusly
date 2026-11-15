@@ -27,12 +27,14 @@
 - **Fresh start every day** — each day begins at zero; previous days stay available and editable.
 - **Manual corrections** — edit start/end times, add or delete intervals. Forgot to stop? Just type when you finished.
 - **Drag time between tasks** — logged to the wrong task? Drag the interval (⠿) onto the right one.
-- **Idle auto-pause** — no mouse or keyboard for 10 minutes (configurable), screen lock or sleep → Focusly notices.
-  When you're back it asks what to do with that time: discard it, keep it, or log it to another task.
+- **Idle auto-pause** — away from the computer longer than 10 minutes (configurable): no mouse or keyboard, a locked screen
+  or sleep. When you're back it asks what to do with that time: discard it, keep it, or log it to another task.
+  Shorter breaks count as work.
 - **Reminders** — "Still on it?" every 30 minutes, "Timer is not running" when you work without tracking,
   and an end-of-workday summary. Work days are configurable — no nagging on weekends.
-- **Mini mode** — a single always-on-top line with `Client: Task`, the timer and stop/start. It takes the place of the window's top edge,
-  and the window expands back from wherever you moved the bar. Works with multiple monitors.
+- **Mini mode** — a single always-on-top line with `Client: Task`, the timer and stop/start. The window expands from the bar
+  and collapses back to it: in the lower half of the screen it grows upwards, in the upper half — downwards.
+  Choosing a task from a reminder opens the window just for that and returns to the bar once the task starts.
 - **Weekly report** — client → task → day table; copy to Google Sheets / Excel or export a detailed CSV.
 - **Hide or delete** — hide clients and tasks you're done with (history and reports stay), or delete ones added by mistake (with confirmation).
 - **Always at hand** — the close button minimizes Focusly to the taskbar (it has a taskbar icon in mini mode too);
@@ -152,9 +154,9 @@ test/            end-to-end tests (Playwright + Electron)
 **Focusly** — простой минималистичный тайм-трекер для работы с клиентами: время по клиентам и задачам, переключение в один клик, отчёт за неделю.
 
 **Что умеет:** клиенты и задачи с запуском в один клик и мгновенным переключением; каждый день начинается с нуля,
-прошлые дни можно открыть и поправить; ручная правка интервалов и перенос времени на другую задачу перетаскиванием; новые задачи появляются сверху; автопауза при бездействии, блокировке экрана и сне
-с вопросом при возвращении («убрать время», «оставить» или «записать на другую задачу»); напоминания «продолжаем?»,
-«таймер не запущен» и «конец рабочего дня» с учётом рабочих дней; мини-режим поверх всех окон (полоска встаёт на место верха окна, окно раскрывается от неё); недельный отчёт
+прошлые дни можно открыть и поправить; ручная правка интервалов и перенос времени на другую задачу перетаскиванием; новые задачи появляются сверху; автопауза при отсутствии дольше 10 минут (нет мыши и клавиатуры, экран заблокирован или компьютер спит)
+с вопросом при возвращении («убрать время», «оставить» или «записать на другую задачу»), короткие отлучки считаются работой; напоминания «продолжаем?»,
+«таймер не запущен» и «конец рабочего дня» с учётом рабочих дней; мини-режим поверх всех окон (окно раскрывается из полоски и сворачивается обратно на то же место); недельный отчёт
 с копированием в Google Sheets / Excel и экспортом CSV; скрытие завершённых клиентов и задач или удаление ошибочных (с подтверждением); иконка всегда на панели задач, быстрый старт/стоп из трея, автозапуск;
 интерфейс на английском и русском; тихое автообновление (зелёная точка на ⚙, без всплывающих окон). Все данные хранятся только у тебя на компьютере.
 
