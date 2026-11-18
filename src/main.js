@@ -131,6 +131,7 @@ function rememberMini() {
 // ---------- главное окно ----------
 function showMain(source) {
   if (!mainWin) return;
+  if (ui.mini && miniWin) { closeMini(source); return; } // в мини-режиме «показать окно» = развернуть из полоски
   logEvent('main:show', source);
   if (mainWin.isMinimized()) mainWin.restore();
   mainWin.show();
@@ -138,8 +139,39 @@ function showMain(source) {
 }
 
 // ---------- мини-режим: одна строка поверх всех окон ----------
+// Полоска создаётся один раз и дальше только прячется/показывается — переключение мгновенное.
+// На панели задач одна постоянная кнопка — главного окна: в мини-режиме оно свёрнуто туда,
+// а клик по кнопке разворачивает окно из полоски.
 // returnToMini: окно раскрыли из напоминания («Choose task», «Switch») — после запуска задачи свернём обратно
 let returnToMini = false;
+const isMac = process.platform === 'darwin';
+function createMiniWindow(bounds) {
+  miniWin = new BrowserWindow({
+    ...bounds,
+    minWidth: 240, maxWidth: 700, minHeight: MINI_H, maxHeight: MINI_H,
+    frame: false, resizable: true, maximizable: false, minimizable: false, fullscreenable: false,
+    alwaysOnTop: true, skipTaskbar: true, show: false,
+    title: 'Focusly', icon: ICON('icon.png'), backgroundColor: '#ffffff',
+    webPreferences: { preload: path.join(__dirname, 'preload.js') },
+  });
+  miniWin.setAlwaysOnTop(true, 'screen-saver');
+  miniWin.setVisibleOnAllWorkspaces(true);
+  miniWin.loadFile(path.join(__dirname, 'mini.html'));
+  miniWin.once('ready-to-show', () => {
+    miniWin.webContents.send('mini:state', trayState);
+    if (ui.mini) miniWin.showInactive();
+  });
+  miniWin.on('moved', rememberMini);
+  miniWin.on('resized', rememberMini);
+  miniWin.on('closed', () => { miniWin = null; });
+}
+// главное окно в мини-режиме: свёрнуто на панель задач (в macOS — спрятано, там есть Dock)
+function parkMain() {
+  if (!mainWin) return;
+  if (isMac) { mainWin.hide(); return; }
+  if (!mainWin.isVisible()) mainWin.showInactive();
+  if (!mainWin.isMinimized()) mainWin.minimize();
+}
 function openMini(source) {
   logEvent('mini:open', source);
   returnToMini = false;
@@ -148,23 +180,9 @@ function openMini(source) {
   else if (ui.miniPos) bounds = fitToScreen({ ...ui.miniPos, width: miniWidth(), height: MINI_H });
   else bounds = miniFromMain(savedMainBounds());
   ui.mini = true; ui.miniPos = { x: bounds.x, y: bounds.y }; saveUi();
-  if (mainWin) mainWin.hide();
-  if (miniWin) { miniWin.setBounds(bounds); miniWin.showInactive(); updateTray(); return; }
-  miniWin = new BrowserWindow({
-    ...bounds,
-    minWidth: 240, maxWidth: 700, minHeight: MINI_H, maxHeight: MINI_H,
-    frame: false, resizable: true, maximizable: false, fullscreenable: false,
-    alwaysOnTop: true, skipTaskbar: false, show: false, // иконка на панели задач есть и в мини-режиме
-    title: 'Focusly', icon: ICON('icon.png'), backgroundColor: '#ffffff',
-    webPreferences: { preload: path.join(__dirname, 'preload.js') },
-  });
-  miniWin.setAlwaysOnTop(true, 'screen-saver');
-  miniWin.setVisibleOnAllWorkspaces(true);
-  miniWin.loadFile(path.join(__dirname, 'mini.html'));
-  miniWin.once('ready-to-show', () => { miniWin.webContents.send('mini:state', trayState); miniWin.showInactive(); });
-  miniWin.on('moved', rememberMini);
-  miniWin.on('resized', rememberMini);
-  miniWin.on('closed', () => { miniWin = null; });
+  if (!miniWin) createMiniWindow(bounds);
+  else { miniWin.setBounds(bounds); miniWin.webContents.send('mini:state', trayState); miniWin.showInactive(); }
+  parkMain();
   updateTray();
 }
 // развернуть из полоски; temporary = раскрыли на время (из напоминания) — вернёмся в мини после запуска задачи
@@ -172,14 +190,18 @@ function closeMini(source, temporary = false) {
   logEvent('mini:close', source + (temporary ? ' (temporary)' : ''));
   ui.mini = false;
   let mb = null;
-  if (miniWin) {
-    if (!miniWin.isMinimized()) { rememberMini(); mb = miniWin.getBounds(); }
-    miniWin.close();
-  }
-  if (!mb && ui.miniPos) mb = { ...ui.miniPos, width: miniWidth(), height: MINI_H };
+  if (miniWin && miniWin.isVisible()) { rememberMini(); mb = miniWin.getBounds(); }
+  else if (ui.miniPos) mb = { ...ui.miniPos, width: miniWidth(), height: MINI_H };
   saveUi();
-  if (mainWin) mainWin.setBounds(mb ? mainFromMini(mb) : savedMainBounds());
-  showMain('mini-close');
+  if (mainWin) {
+    const nb = mb ? mainFromMini(mb) : savedMainBounds();
+    if (mainWin.isMinimized()) { mainWin.setBounds(nb); mainWin.restore(); }
+    mainWin.setBounds(nb);
+    mainWin.show();
+    mainWin.focus();
+    logEvent('main:show', 'mini-close');
+  }
+  if (miniWin) miniWin.hide();
   returnToMini = temporary;
   updateTray();
 }
@@ -213,25 +235,22 @@ function createMainWindow(startHidden) {
   });
   mainWin.loadFile(path.join(__dirname, 'index.html'));
   mainWin.once('ready-to-show', () => {
-    if (ui.mini) return; // в мини-режиме главное окно спрятано, на панели задач — иконка полоски
-    if (startHidden) { mainWin.showInactive(); mainWin.minimize(); } // автозапуск: сразу свёрнуто, но на панели задач
+    if (ui.mini) return; // мини-режим: окно свернёт openMini
+    if (startHidden) { mainWin.showInactive(); mainWin.minimize(); } // автозапуск: сразу свёрнуто на панель задач
     else mainWin.show();
   });
   mainWin.on('moved', rememberMain);
   mainWin.on('resized', rememberMain);
-  // крестик: в Windows/Linux — свернуть на панель задач (так приложение невозможно «потерять»),
-  // в macOS — спрятать, как принято там. Выйти совсем — через меню трея.
+  // клик по кнопке на панели задач в мини-режиме — развернуть окно из полоски
+  mainWin.on('restore', () => { if (ui.mini && miniWin) closeMini('taskbar'); });
+  // крестик закрывает приложение (в macOS — прячет окно, как принято там). Если таймер идёт — спрашиваем.
   mainWin.on('close', (e) => {
     if (isQuitting) return;
     e.preventDefault();
     rememberMain();
     returnToMini = false;
-    if (process.platform === 'darwin') { mainWin.hide(); logEvent('main:hide', 'close-button'); }
-    else { mainWin.minimize(); logEvent('main:minimize', 'close-button'); }
-    if (!ui.closeHintShown && Notification.isSupported()) {
-      ui.closeHintShown = true; saveUi();
-      new Notification({ title: T()('bgTitle'), body: T()('bgBody'), silent: true }).show();
-    }
+    if (isMac) { mainWin.hide(); logEvent('main:hide', 'close-button'); return; }
+    requestQuit('close-button');
   });
   mainWin.on('minimize', () => logEvent('main:minimized'));
   mainWin.on('hide', () => logEvent('main:hidden'));
@@ -242,6 +261,42 @@ function createMainWindow(startHidden) {
   });
   mainWin.on('closed', () => { mainWin = null; });
 }
+
+// ---------- выход ----------
+let quitDialogOpen = false;
+async function requestQuit(source) {
+  if (quitDialogOpen) return;
+  logEvent('quit:request', source);
+  const r = trayState.running;
+  if (r) {
+    quitDialogOpen = true;
+    const t = T();
+    const parent = mainWin && mainWin.isVisible() && !mainWin.isMinimized() ? mainWin : undefined;
+    const res = await dialog.showMessageBox(parent, {
+      type: 'question', title: 'Focusly', noLink: true,
+      message: t('quitTitle'), detail: t('quitDetail', { task: `${r.clientName}: ${r.taskName}` }),
+      buttons: [t('quitStop'), t('quitKeep'), t('quitCancel')], defaultId: 0, cancelId: 2,
+    });
+    quitDialogOpen = false;
+    if (res.response === 2) { logEvent('quit:cancel', source); return; }
+    if (res.response === 0) {
+      quitReason = source + ':stop-timer';
+      send('cmd', { type: 'stopAndQuit' });       // окно остановит таймер, сохранит и попросит выйти
+      setTimeout(() => doQuit(quitReason), 3000);  // запасной выход, если окно не ответило
+      return;
+    }
+    return doQuit(source + ':keep-timer');
+  }
+  doQuit(source);
+}
+function doQuit(reason) {
+  if (isQuitting) return;
+  quitReason = quitReason || reason;
+  send('cmd', { type: 'flush' }); // сохранить данные, если запись ещё не ушла на диск
+  isQuitting = true;
+  setTimeout(() => app.quit(), 300);
+}
+ipcMain.handle('app:quit', () => { doQuit(quitReason || 'renderer'); return true; });
 
 // ---------- трей ----------
 function fmtDur(ms) { const m = Math.floor(ms / 60000); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; }
@@ -274,16 +329,16 @@ function updateTray() {
     items.push({ label: T()('trayDownloadUpdate', { v: updateStatus.version }), click: () => shell.openExternal(RELEASES_URL) });
     items.push({ type: 'separator' });
   }
-  items.push({ label: T()('trayMini'), type: 'checkbox', checked: !!miniWin, click: () => (miniWin ? closeMini('tray-menu') : openMini('tray-menu')) });
-  items.push({ label: T()('trayOpen'), click: () => (miniWin ? closeMini('tray-menu:open') : showMain('tray-menu:open')) });
-  items.push({ label: T()('trayQuit'), click: () => { quitReason = 'tray-quit'; isQuitting = true; app.quit(); } });
+  items.push({ label: T()('trayMini'), type: 'checkbox', checked: !!ui.mini, click: () => (ui.mini ? closeMini('tray-menu') : openMini('tray-menu')) });
+  items.push({ label: T()('trayOpen'), click: () => (ui.mini ? closeMini('tray-menu:open') : showMain('tray-menu:open')) });
+  items.push({ label: T()('trayQuit'), click: () => requestQuit('tray-quit') });
   tray.setContextMenu(Menu.buildFromTemplate(items));
 }
 
 function createTray() {
   tray = new Tray(nativeImage.createFromPath(ICON('tray-idle.png')).resize({ width: 16, height: 16 }));
   tray.on('click', () => {
-    if (miniWin) { miniWin.showInactive(); return; }
+    if (ui.mini && miniWin) { miniWin.showInactive(); return; }
     if (mainWin && mainWin.isVisible() && !mainWin.isMinimized() && mainWin.isFocused()) { logEvent('main:minimize', 'tray-click'); mainWin.minimize(); } else showMain('tray-click');
   });
   updateTray();
@@ -357,7 +412,7 @@ ipcMain.handle('popup:answer', (_e, answer) => {
   if (['switch', 'choose', 'open'].includes(answer.action)) {
     // из мини-режима: раскрываем окно на месте полоски (без дубля); для «Choose task»/«Switch» — на время,
     // после запуска задачи окно само свернётся обратно в полоску
-    if (miniWin) closeMini('popup:' + answer.action, answer.action !== 'open');
+    if (ui.mini && miniWin) closeMini('popup:' + answer.action, answer.action !== 'open');
     else showMain('popup:' + answer.action);
   }
   return true;
@@ -370,7 +425,7 @@ ipcMain.handle('diag:main', () => ({
   idleNowSec: powerMonitor.getSystemIdleTime(), idleState: powerMonitor.getSystemIdleState(60),
   notificationsSupported: Notification.isSupported(),
   popup: popupWin ? { visible: popupWin.isVisible(), bounds: popupWin.getBounds(), onTop: popupWin.isAlwaysOnTop(), kind: popupPayload && popupPayload.kind } : null,
-  mini: miniWin ? { visible: miniWin.isVisible(), bounds: miniWin.getBounds() } : null,
+  mini: miniWin ? { visible: miniWin.isVisible(), bounds: miniWin.getBounds(), mode: !!ui.mini } : null,
   update: updateStatus,
   windows: { main: mainWin ? { visible: mainWin.isVisible(), minimized: mainWin.isMinimized(), bounds: mainWin.getBounds() } : null, mainBounds: ui.mainBounds, miniPos: ui.miniPos, uiMini: ui.mini, returnToMini },
   log: readLogTail(60),
@@ -493,7 +548,7 @@ if (!app.requestSingleInstanceLock()) {
   // второй экземпляр: просто будим первый и выходим
   app.quit();
 } else {
-  app.on('second-instance', () => { logEvent('second-instance'); if (miniWin) miniWin.showInactive(); else showMain('second-instance'); });
+  app.on('second-instance', () => { logEvent('second-instance'); if (ui.mini && miniWin) miniWin.showInactive(); else showMain('second-instance'); });
   app.whenReady().then(() => {
     // Windows показывает уведомления только «зарегистрированным» приложениям.
     // В собранном .exe это делает установщик; при запуске через npm start используем путь к electron.exe.

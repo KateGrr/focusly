@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   // трей и окно
   updateTray: (state) => ipcRenderer.invoke('tray:update', state),
   showWindow: () => ipcRenderer.invoke('window:show'),
+  quit: () => ipcRenderer.invoke('app:quit'),
   onCommand: on('cmd'),
 
   // мини-режим

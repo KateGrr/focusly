@@ -50,7 +50,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await collapse();
   let mini = await get('mini.html'), main = await get('index.html');
   check('top half: mini on the top edge', mini && near(mini.b.x, wa.x + 100) && near(mini.b.y, wa.y + 20), mini && mini.b);
-  check('main hidden in mini mode', main && !main.visible);
+  const parked = (m) => m && (!m.visible || m.minimized || process.platform === 'linux'); // в xvfb нет оконного менеджера — «свернуть» не работает
+  check('main parked in mini mode (minimized to the taskbar)', parked(main), main);
   await expand();
   main = await get('index.html');
   check('top half: expands down from the bar', main && main.visible && near(main.b.y, wa.y + 20), main && main.b);
@@ -83,23 +84,29 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   if (pop) await pop.click('text=Choose task', { noWaitAfter: true }).catch(() => {});
   await sleep(1800);
   mini = await get('mini.html'); main = await get('index.html');
-  check('choose task: full window, no mini duplicate', main && main.visible && !mini, { main: main && main.visible, mini: !!mini });
+  check('choose task: full window, no mini duplicate', main && main.visible && !main.minimized && mini && !mini.visible, { main, mini: mini && mini.visible });
   await win.evaluate(() => { startTask('t1'); render(); });
   await sleep(2500);
   mini = await get('mini.html'); main = await get('index.html');
-  check('after starting a task: back to mini automatically', mini && mini.visible && main && !main.visible, { mini: mini && mini.b, main: main && main.visible });
+  check('after starting a task: back to mini automatically', mini && mini.visible && parked(main), { mini: mini && mini.b, main });
 
-  // 5. крестик: Windows — свернуть на панель задач, приложение живо
-  await expand();
+  // 5. клик по кнопке на панели задач в мини-режиме разворачивает окно из полоски (Windows)
+  if (process.platform === 'win32') {
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((x) => x.webContents.getURL().endsWith('index.html')).restore());
+    await sleep(1500);
+    mini = await get('mini.html'); main = await get('index.html');
+    check('taskbar click in mini mode expands the window', main && main.visible && !main.minimized && mini && !mini.visible, { main, mini: mini && mini.visible });
+  } else await expand();
+
+  // 6. крестик при идущем таймере: приложение не закрывается молча, а спрашивает
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((x) => x.webContents.getURL().endsWith('index.html')).close());
-  await sleep(1000);
+  await sleep(1500);
   main = await get('index.html');
-  if (process.platform === 'win32') check('close button minimizes, window still exists', main && main.minimized, main);
-  else check('close button keeps the app running', !!main, main);
+  check('close with a running timer asks first (app still running)', !!main, main);
 
   const diag = JSON.parse(await win.evaluate(() => diagnostics()));
   console.log('LOG TAIL:\n' + diag.main.log.slice(-14).join('\n'));
-  check('event log records actions', diag.main.log.some((l) => l.includes('mini:open mini-button')) && diag.main.log.some((l) => l.includes('auto-return-after-start')) && diag.main.log.some((l) => l.includes('close-button')));
+  check('event log records actions', diag.main.log.some((l) => l.includes('mini:open mini-button')) && diag.main.log.some((l) => l.includes('auto-return-after-start')) && diag.main.log.some((l) => l.includes('quit:request close-button')));
   await app.evaluate(({ app }) => app.exit(0)).catch(() => {});
   const failed = checks.filter((c) => !c.ok);
   console.log(failed.length ? `WINDOWS FAILED (${failed.length})` : 'WINDOWS OK');

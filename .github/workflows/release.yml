@@ -37,8 +37,13 @@ jobs:
             exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
+          # описание релиза — раздел этой версии из CHANGELOG.md (если есть), иначе — список изменений GitHub
+          awk -v v="$V" '$0 ~ "^## "v"$" {f=1; next} /^## / {if (f) exit} f' CHANGELOG.md > notes.md || true
+          if [ -s notes.md ]; then NOTES=(--notes-file notes.md); else NOTES=(--generate-notes); fi
           if [ "$STATE" = "none" ]; then
-            gh release create "v$V" --draft --title "Focusly $V" --generate-notes --target "$GITHUB_SHA"
+            gh release create "v$V" --draft --title "Focusly $V" "${NOTES[@]}" --target "$GITHUB_SHA"
+          elif [ -s notes.md ]; then
+            gh release edit "v$V" --notes-file notes.md
           fi
 
   build:

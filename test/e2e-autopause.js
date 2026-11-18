@@ -81,15 +81,42 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   results.sleepHolds = (await state()).away === true;
   await win.evaluate(() => { const r = running(); if (r && r.idleStart) r.idleStart -= 40 * 60e3; if (away) away.start -= 40 * 60e3; });
   await app.evaluate(({ powerMonitor }) => powerMonitor.emit('resume'));
-  await sleep(7000);
+  await sleep(4000);
+  results.wakeNotReturn = (await state()).away === true; // ввод от самого пробуждения — не возвращение
+  await sleep(15000);                                      // настоящий ввод через 10+ секунд после пробуждения (проверка раз в 5 сек)
   console.log('resumed', JSON.stringify(await state()));
   results.sleepPopup = await popupText();
   console.log('SLEEP POPUP:', results.sleepPopup);
 
+  const sp = app.windows().find((w) => w.url().endsWith('popup.html'));
+  if (sp) { await sp.click('text=Keep', { noWaitAfter: true }).catch(() => {}); await sleep(1500); }
+
+  // --- 4. как в журнале пользователя: крышка закрыта → сон, блокировка и пробуждение почти одновременно,
+  //        после пробуждения Windows показывает «свежий ввод»; разблокировка через 73 минуты ---
+  await app.evaluate(({ powerMonitor }) => { powerMonitor.emit('suspend'); powerMonitor.emit('lock-screen'); powerMonitor.emit('resume'); });
+  await sleep(12000); // приложение «тикает», ввод 2 сек назад — пауза должна держаться: экран заблокирован
+  console.log('lid: locked after wake', JSON.stringify(await state()));
+  results.lidHolds = (await state()).away === true;
+  await win.evaluate(() => { const r = running(); if (r && r.idleStart) r.idleStart -= 73 * 60e3; if (away) away.start -= 73 * 60e3; });
+  await app.evaluate(({ powerMonitor }) => powerMonitor.emit('unlock-screen'));
+  await sleep(2500);
+  results.lidPopup = await popupText();
+  console.log('LID POPUP:', results.lidPopup);
+  const lp2 = app.windows().find((w) => w.url().endsWith('popup.html'));
+  if (lp2) { await lp2.click('text=Keep', { noWaitAfter: true }).catch(() => {}); await sleep(1500); }
+
+  // --- 5. компьютер спал без каких-либо сигналов: приложение замечает разрыв во времени ---
+  await win.evaluate(() => { const r = running(); if (r) r.start -= 60 * 60e3; lastBeatAt = Date.now() - 30 * 60e3; });
+  await sleep(20000);
+  console.log('gap', JSON.stringify(await state()));
+  results.gapPopup = await popupText();
+  console.log('GAP POPUP:', results.gapPopup);
+
   const diag = await win.evaluate(() => diagnostics());
   fs.writeFileSync('test-output/diagnostics-autopause.json', diag);
   await app.close();
-  const ok = results.idlePopup && results.idlePopup.includes('You were away') && results.discardOk && results.shortLockSilent && results.lockHolds && results.lockPopup && results.lockPopup.includes('You were away') && results.sleepHolds && results.sleepPopup && results.sleepPopup.includes('You were away');
+  const ok = results.idlePopup && results.idlePopup.includes('You were away') && results.discardOk && results.shortLockSilent && results.lockHolds && results.lockPopup && results.lockPopup.includes('You were away') && results.sleepHolds && results.wakeNotReturn && results.sleepPopup && results.sleepPopup.includes('You were away')
+    && results.lidHolds && results.lidPopup && results.lidPopup.includes('1 h 13 min') && results.gapPopup && results.gapPopup.includes('You were away');
   console.log(ok ? 'AUTOPAUSE OK' : 'AUTOPAUSE FAILED', JSON.stringify(results));
   if (!ok) process.exit(1);
 })().catch((e) => { console.error('FAIL', e); process.exit(1); });

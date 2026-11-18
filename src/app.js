@@ -76,6 +76,12 @@ function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => window.api.save(data), 150);
 }
+// сохранить сразу (перед выходом)
+function saveNow() {
+  clearTimeout(saveTimer);
+  data.lastSeen = Date.now();
+  return window.api.save(data);
+}
 const client = (id) => data.clients.find((c) => c.id === id);
 const task = (id) => data.tasks.find((t) => t.id === id);
 const running = () => data.entries.find((e) => e.end == null);
@@ -222,9 +228,16 @@ function isWorkDay(ts = Date.now()) {
   const wd = data.settings.workDays;
   return !Array.isArray(wd) || wd.includes(new Date(ts).getDay());
 }
+// после времени конца рабочего дня «таймер не запущен» не напоминаем
+function afterWorkday(ts = Date.now()) {
+  const s = data.settings;
+  if (!s.eodOn || !/^\d{1,2}:\d{2}$/.test(s.eodTime || '')) return false;
+  const [h, m] = s.eodTime.split(':').map(Number);
+  return ts >= startOfKey(keyOf(ts)) + (h * 60 + m) * 60000;
+}
 function checkNotRunning() {
   const s = data.settings;
-  if (!s.notRunningOn || !isWorkDay() || running() || away || popupKind) return;
+  if (!s.notRunningOn || !isWorkDay() || afterWorkday() || running() || away || popupKind) return;
   if (!activeSince || Date.now() < notRunningSnoozeUntil) return;
   const activeMs = Date.now() - activeSince;
   if (activeMs < s.notRunningMinutes * 60000) return;
@@ -267,6 +280,7 @@ function checkEndOfDay() {
 function beginAway(start, reason = 'idle') {
   if (away) return;
   away = { start, reason, resumed: false };
+  try { window.api.log('away:begin', { reason, agoSec: Math.round((Date.now() - start) / 1000), running: !!running() }); } catch {}
   activeSince = null;
   const r = running();
   if (r && !r.idleStart) {
@@ -275,9 +289,11 @@ function beginAway(start, reason = 'idle') {
     save();
   }
 }
-function endAway(end) {
+function endAway(end, why) {
   if (!away) return;
+  const was = away;
   away = null;
+  try { window.api.log('away:end', { reason: was.reason, by: why, minutes: Math.round((end - was.start) / 60000), running: !!running() }); } catch {}
   activeSince = end;
   const r = running();
   if (!r || !r.idleStart) return;
@@ -301,23 +317,66 @@ function showIdlePopup() {
 }
 
 let idleTicks = 0, lastIdleSec = null, lastIdleAt = 0;
+// состояние системы: заблокирован ли экран и когда компьютер последний раз просыпался
+let screenLocked = false;
+let lastBeatAt = 0;               // время последнего «тика» приложения — по разрыву видно, что компьютер спал
+let resumedAt = 0;
+const WAKE_GRACE = 10000; // ввод в первые 10 секунд после пробуждения — это само пробуждение, а не возвращение человека
 function onIdleSeconds(sec) { safe('idle', () => onIdleSecondsImpl(sec)); }
 function onIdleSecondsImpl(sec) {
   idleTicks++; lastIdleSec = sec; lastIdleAt = Date.now();
   const s = data.settings;
   const now = Date.now();
-  if (!away && s.idleOn && sec >= s.idleMinutes * 60) beginAway(now - sec * 1000);
-  // вернулась к компьютеру: для бездействия — по движению мыши/клавиатуры;
-  // для блокировки — только по разблокировке (иначе пауза снималась через 5 секунд после Win+L);
-  // для сна — по движению мыши, но только после пробуждения
-  else if (away && sec < 30 && (away.reason === 'idle' || (away.reason === 'sleep' && away.resumed)
-    // страховка: если сигнал разблокировки не пришёл, но после блокировки прошло >1 мин и есть ввод — человек вернулся
-    || (away.reason === 'lock' && now - sec * 1000 - away.start > 60000))) endAway(now - sec * 1000);
+  const lastInput = now - sec * 1000;
+  if (!away && s.idleOn && sec >= s.idleMinutes * 60) beginAway(lastInput, 'idle');
+  else if (away && sec < 30 && cameBack(lastInput)) endAway(lastInput, 'input');
   // учёт активности для «таймер не запущен»
   if (!away) {
     if (sec >= 120) activeSince = null;              // 2+ мин без ввода — не считаем, что работаешь
-    else if (!activeSince) activeSince = now - sec * 1000;
+    else if (!activeSince) activeSince = lastInput;
   }
+}
+// вернулась ли к компьютеру по вводу мыши/клавиатуры
+function cameBack(lastInput) {
+  if (lastInput < resumedAt + WAKE_GRACE) return false;   // это «ввод» от самого пробуждения
+  if (away.reason === 'idle') return true;
+  if (away.reason === 'sleep') return away.resumed;
+  // блокировка: возвращение — разблокировка. Страховка на случай, если сигнал разблокировки не пришёл:
+  // ввод позже чем через минуту после блокировки и пробуждения
+  if (away.reason === 'lock') return !screenLocked && lastInput - Math.max(away.start, resumedAt) > 60000;
+  return false;
+}
+function onLock() {
+  screenLocked = true;
+  logAway('lock');
+  if (!data.settings.lockPause) return;
+  if (away) away.reason = 'lock';        // уже отсутствуем (например, из-за сна) — теперь ждём именно разблокировки
+  else beginAway(Date.now(), 'lock');
+}
+function onUnlock() {
+  screenLocked = false;
+  logAway('unlock');
+  if (away) endAway(Date.now(), 'unlock');
+}
+function onSuspend() {
+  logAway('suspend');
+  if (data.settings.lockPause) beginAway(Date.now(), 'sleep');
+}
+function onResume() {
+  resumedAt = Date.now();
+  logAway('resume');
+  if (away && away.reason === 'sleep') away.resumed = true;
+}
+// приложение «выпало» из времени (компьютер спал, а сигналов не было): считаем это сном
+function onTimeGap(from, to) {
+  logAway('gap', Math.round((to - from) / 1000) + 's');
+  resumedAt = to;
+  if (!data.settings.lockPause) return;
+  if (!away) { beginAway(from, 'sleep'); if (away) away.resumed = true; }
+  else if (away.reason === 'sleep') away.resumed = true;
+}
+function logAway(event, extra) {
+  try { window.api.log('away:' + event, { away: away && away.reason, locked: screenLocked, running: !!running(), extra }); } catch {}
 }
 
 function onPopupAnswer(a) {
@@ -392,7 +451,9 @@ function pushTray() {
   const json = JSON.stringify({ ...state, running: state.running && { ...state.running, todayMs: Math.floor(state.running.todayMs / 60000) } });
   if (json !== lastTrayJson) { lastTrayJson = json; window.api.updateTray({ ...state, asOf: Date.now() }); }
 }
-function onTrayCommand(cmd) {
+async function onTrayCommand(cmd) {
+  if (cmd.type === 'flush') { await saveNow(); return; }
+  if (cmd.type === 'stopAndQuit') { stopRunning(); await saveNow(); window.api.quit(); return; }
   if (cmd.type === 'stop') stopRunning();
   else if (cmd.type === 'start' && cmd.taskId) startTask(cmd.taskId);
   else if (cmd.type === 'newTask') { focusAddTask(); return; }
@@ -860,6 +921,7 @@ function reminderBlockers() {
   const s = data.settings, b = [], now = Date.now();
   if (!s.notRunningOn) b.push('notRunningOff');
   if (!isWorkDay()) b.push('dayOff');
+  if (afterWorkday()) b.push('afterEndOfDay');
   if (running()) b.push('timerRunning');
   if (away) b.push('away(' + Math.round((now - away.start) / 1000) + 's)');
   if (popupKind) b.push('popupOpen:' + popupKind);
@@ -877,6 +939,7 @@ async function diagnostics() {
     settings: pick(['remindersOn', 'reminderMinutes', 'notRunningOn', 'notRunningMinutes', 'eodOn', 'eodTime', 'workDays', 'idleOn', 'idleMinutes', 'lockPause', 'sound', 'systemNotify', 'lang']),
     state: {
       popupKind, away: away ? { sec: Math.round((now - away.start) / 1000), reason: away.reason, resumed: away.resumed } : null,
+      screenLocked, resumedAgoSec: resumedAt ? Math.round((now - resumedAt) / 1000) : null,
       activeSinceSec: activeSince ? Math.round((now - activeSince) / 1000) : null,
       snoozeSec: Math.max(0, Math.round((notRunningSnoozeUntil - now) / 1000)),
       running: r ? { sec: Math.round((now - r.start) / 1000), idleStart: !!r.idleStart, lastCheckSec: r.lastCheck ? Math.round((now - r.lastCheck) / 1000) : null } : null,
@@ -1069,11 +1132,10 @@ function bind() {
   window.api.onPopupClosed(() => { popupKind = null; });
   window.api.onCommand(onTrayCommand);
   window.api.onIdle(onIdleSeconds);
-  window.api.onLock(() => { if (data.settings.lockPause) beginAway(Date.now(), 'lock'); });
-  window.api.onUnlock(() => endAway(Date.now()));
-  window.api.onSuspend(() => { if (data.settings.lockPause) beginAway(Date.now(), 'sleep'); });
-  // после сна ждём реального движения мыши/клавиатуры — его поймает onIdleSeconds
-  window.api.onResume(() => { if (away && away.reason === 'sleep') away.resumed = true; });
+  window.api.onLock(() => safe('lock', onLock));
+  window.api.onUnlock(() => safe('unlock', onUnlock));
+  window.api.onSuspend(() => safe('suspend', onSuspend));
+  window.api.onResume(() => safe('resume', onResume));
 }
 
 // ---------- старт ----------
@@ -1116,6 +1178,10 @@ async function init() {
       if (weekStart === mondayOf(addDays(t, -1)) && mondayOf(t) !== weekStart) weekStart = mondayOf(t);
       render();
     }
+    // разрыв во времени: пока компьютер спал, таймеры приложения не шли
+    const nowTick = Date.now();
+    if (lastBeatAt && nowTick - lastBeatAt > 60000) { const from = lastBeatAt; safe('gap', () => onTimeGap(from, nowTick)); }
+    lastBeatAt = nowTick;
     safe('tick', tickNumbers);
     safe('tray', pushTray);
     if (++beat % 60 === 0) { data.lastSeen = Date.now(); save(); }

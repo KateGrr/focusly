@@ -29,7 +29,7 @@
 - **Drag time between tasks** — logged to the wrong task? Drag the interval (⠿) onto the right one.
 - **Idle auto-pause** — away from the computer longer than 10 minutes (configurable): no mouse or keyboard, a locked screen
   or sleep. When you're back it asks what to do with that time: discard it, keep it, or log it to another task.
-  Shorter breaks count as work.
+  Shorter breaks count as work. Closing the laptop lid is handled too.
 - **Reminders** — "Still on it?" every 30 minutes, "Timer is not running" when you work without tracking,
   and an end-of-workday summary. Work days are configurable — no nagging on weekends.
 - **Mini mode** — a single always-on-top line with `Client: Task`, the timer and stop/start. The window expands from the bar
@@ -37,7 +37,7 @@
   Choosing a task from a reminder opens the window just for that and returns to the bar once the task starts.
 - **Weekly report** — client → task → day table; copy to Google Sheets / Excel or export a detailed CSV.
 - **Hide or delete** — hide clients and tasks you're done with (history and reports stay), or delete ones added by mistake (with confirmation).
-- **Always at hand** — the close button minimizes Focusly to the taskbar (it has a taskbar icon in mini mode too);
+- **Always at hand** — one Focusly button on the taskbar (in mini mode too — click it to expand the window);
   the tray icon next to the clock has quick start/stop. Optional start on login (starts minimized).
 - **English / Русский** interface.
 - **Private by design** — all data stays on your computer in a single JSON file. No accounts, no cloud.
@@ -97,7 +97,7 @@ Updates install automatically.
 - Week view hides empty weekend days; the Total column always stays visible.
 - Something not working? ⚙ → About → *Copy diagnostics* and send it along with your question. It includes the recent
   event log (when and why the window was minimized, hidden or closed, lock/sleep, errors) — no client or task names.
-- The close button minimizes Focusly to the taskbar. To quit completely: right-click the tray icon → **Quit**.
+- ✕ quits Focusly (if a timer is running it asks whether to stop it); – minimizes it to the taskbar.
 - Your data is a single JSON file (Settings → *Open data folder*): `%APPDATA%\Focusly` on Windows,
   `~/Library/Application Support/Focusly` on macOS, `~/.config/Focusly` on Linux. The event log `focusly.log` is next to it.
 
@@ -143,6 +143,10 @@ test/            end-to-end tests (Playwright + Electron)
 .github/         release and test workflows
 ```
 
+## What's new
+
+See [CHANGELOG.md](CHANGELOG.md) — the same notes are shown on each [release](https://github.com/KateGrr/focusly/releases).
+
 ## License
 
 [MIT](LICENSE)
@@ -169,7 +173,7 @@ test/            end-to-end tests (Playwright + Electron)
 Обновления скачиваются в фоне. Когда новая версия готова, на ⚙ появляется зелёная точка — нажми **Restart and update**
 в ⚙ → About или просто продолжай работать: обновление установится при следующем выходе.
 
-Крестик сворачивает Focusly на панель задач. Чтобы выйти совсем — правый клик по иконке у часов → **Quit**.
+✕ закрывает Focusly (если таймер идёт — спросит, остановить ли его), «–» сворачивает на панель задач.
 
 **macOS:** скачай `…-mac-arm64.dmg` (Apple M1–M4) или `…-mac-x64.dmg` (Intel), перетащи Focusly в «Программы».
 При первом запуске macOS скажет, что не может проверить приложение: **Системные настройки → Конфиденциальность и безопасность →
